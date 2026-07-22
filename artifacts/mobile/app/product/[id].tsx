@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { Alert, Dimensions, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { ActivityIndicator, Alert, Dimensions, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { TextInput } from '@/components/TextInput';
+import { Text } from '@/components/Text';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,10 +11,11 @@ import { CartIconNew } from '@/components/TabIcons';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useTheme } from '@/context/ThemeContext';
-import { PRODUCTS, formatPrice } from '@/constants/data';
+import { Product, formatPrice } from '@/constants/data';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import RatingStars from '@/components/RatingStars';
+import { api, mapApiProduct } from '@/services/api';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_W * 0.95;
@@ -128,7 +131,25 @@ export default function ProductDetailScreen() {
   // background — always white so they stay visible over any gradient.
   const heroBtnIcon = '#FFFFFF';
 
-  const product = PRODUCTS.find(p => p.id === id);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loadingProduct, setLoadingProduct] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoadingProduct(true);
+    api.products.get(id)
+      .then(p => setProduct(mapApiProduct(p)))
+      .catch(console.error)
+      .finally(() => setLoadingProduct(false));
+  }, [id]);
+
+  if (loadingProduct) {
+    return (
+      <View style={[styles.notFound, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   if (!product) {
     return (
@@ -148,10 +169,10 @@ export default function ProductDetailScreen() {
 
   const colorSwatches = isApparel
     ? [
-        product.gradient[0],
-        product.gradient[1],
-        shadeHex(product.gradient[0], -28),
-        shadeHex(product.gradient[1], 22),
+        (product as any).gradient?.[0] ?? '#1E3A5F',
+        (product as any).gradient?.[1] ?? '#3B82F6',
+        shadeHex((product as any).gradient?.[0] ?? '#1E3A5F', -28),
+        shadeHex((product as any).gradient?.[1] ?? '#3B82F6', 22),
       ]
     : [];
 
@@ -220,7 +241,7 @@ export default function ProductDetailScreen() {
             {HERO_SLIDES.map((slide, i) => (
               <View key={i} style={{ width: SCREEN_W, height: HERO_HEIGHT }}>
                 <LinearGradient
-                  colors={product.gradient as string[]}
+                  colors={[(product as any).gradient?.[0] ?? '#1E3A5F', (product as any).gradient?.[1] ?? '#3B82F6']}
                   style={StyleSheet.absoluteFill}
                   start={slide.start}
                   end={slide.end}

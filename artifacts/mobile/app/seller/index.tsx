@@ -1,5 +1,6 @@
 import React from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, TouchableOpacity, View, Image as RNImage } from 'react-native';
+import { Text } from '@/components/Text';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,8 +9,8 @@ import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/context/AuthContext';
 import { formatPrice, SELLER_PRODUCTS } from '@/constants/data';
 
-const totalRevenue = SELLER_PRODUCTS.reduce((s, p) => s + p.revenue, 0);
-const totalSold = SELLER_PRODUCTS.reduce((s, p) => s + p.sold, 0);
+const totalRevenue = SELLER_PRODUCTS.reduce((s, p) => s + (p.sales * p.price), 0);
+const totalSold = SELLER_PRODUCTS.reduce((s, p) => s + p.sales, 0);
 
 const STATS = [
   { icon: 'trending-up', label: 'Revenue', value: formatPrice(totalRevenue), color: '#22C55E' },
@@ -18,80 +19,36 @@ const STATS = [
   { icon: 'star', label: 'Avg Rating', value: '4.5', color: '#F59E0B' },
 ];
 
-export default function SellerDashboardScreen() {
+export default function AdminDashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user, becomeSeller } = useAuth();
+  const { user } = useAuth();
   const isWeb = Platform.OS === 'web';
 
-  if (!user) {
+  if (!user || user.role !== 'admin') {
     return (
       <View style={[styles.authPrompt, { backgroundColor: colors.background }]}>
-        <SvgIcon name="storefront-outline" size={56} color={colors.mutedForeground} />
-        <Text style={[styles.authTitle, { color: colors.foreground }]}>Sign In to Access Seller Hub</Text>
-        <TouchableOpacity style={[styles.authBtn, { backgroundColor: colors.primary }]} onPress={() => router.push('/auth/login')}>
-          <Text style={[styles.authBtnText, { color: colors.primaryForeground }]}>Sign In</Text>
+        <SvgIcon name="shield-outline" size={56} color={colors.mutedForeground} />
+        <Text style={[styles.authTitle, { color: colors.foreground }]}>Admin Access Only</Text>
+        <TouchableOpacity style={[styles.authBtn, { backgroundColor: colors.primary }]} onPress={() => router.replace('/')}>
+          <Text style={[styles.authBtnText, { color: colors.primaryForeground }]}>Go Home</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  if (!user.isSeller) {
-    return (
-      <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={{ flexGrow: 1 }}>
-        <LinearGradient colors={['#7C3AED', '#4F46E5']} style={styles.becomeHero}>
-          <SvgIcon name="storefront" size={60} color="#fff" />
-          <Text style={styles.becomeTitle}>Start Selling on Griper</Text>
-          <Text style={styles.becomeSubtitle}>Reach millions of customers across India and globally</Text>
-        </LinearGradient>
-
-        <View style={styles.features}>
-          {[
-            { icon: 'flash', title: 'Easy Setup', desc: 'List your products in minutes' },
-            { icon: 'trending-up', title: 'Grow Sales', desc: 'Access millions of buyers' },
-            { icon: 'shield-checkmark', title: 'Secure Payments', desc: 'Fast & reliable payment settlement' },
-            { icon: 'headset', title: '24/7 Support', desc: 'Dedicated seller support team' },
-          ].map(f => (
-            <View key={f.title} style={[styles.featureRow, { borderBottomColor: colors.border }]}>
-              <View style={[styles.featureIcon, { backgroundColor: colors.primary + '18' }]}>
-                <SvgIcon name={f.icon as any} size={22} color={colors.primary} />
-              </View>
-              <View>
-                <Text style={[styles.featureTitle, { color: colors.foreground }]}>{f.title}</Text>
-                <Text style={[styles.featureDesc, { color: colors.mutedForeground }]}>{f.desc}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.becomeActions}>
-          <TouchableOpacity
-            style={[styles.becomeBtn, { backgroundColor: colors.primary }]}
-            onPress={() => { becomeSeller(); }}
-          >
-            <SvgIcon name="storefront" size={20} color={colors.primaryForeground} />
-            <Text style={[styles.becomeBtnText, { color: colors.primaryForeground }]}>Become a Seller</Text>
-          </TouchableOpacity>
-          <Text style={[styles.becomeDisclaimer, { color: colors.mutedForeground }]}>
-            Free to register. No monthly fees.
-          </Text>
-        </View>
-      </ScrollView>
-    );
-  }
-
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
-      {/* Seller greeting */}
+      {/* Admin greeting */}
       <LinearGradient colors={['#7C3AED', '#4F46E5']} style={styles.sellerHeader}>
         <View style={styles.sellerAvatar}>
           <Text style={styles.sellerAvatarText}>{user.name.charAt(0)}</Text>
         </View>
         <View>
           <Text style={styles.sellerGreeting}>Hello, {user.name.split(' ')[0]}</Text>
-          <Text style={styles.sellerBadge}>Verified Seller</Text>
+          <Text style={styles.sellerBadge}>System Admin</Text>
         </View>
-        <TouchableOpacity style={styles.addProductBtn}>
+        <TouchableOpacity style={styles.addProductBtn} onPress={() => router.push('/seller/add-product')}>
           <SvgIcon name="add-circle" size={22} color="#fff" />
           <Text style={styles.addProductText}>Add Product</Text>
         </TouchableOpacity>
@@ -120,7 +77,7 @@ export default function SellerDashboardScreen() {
         </View>
         {SELLER_PRODUCTS.map(product => (
           <View key={product.id} style={[styles.productRow, { borderBottomColor: colors.border }]}>
-            <LinearGradient colors={product.gradient as string[]} style={styles.productImg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+            <RNImage source={{ uri: product.image }} style={styles.productImg} resizeMode="cover" />
             <View style={styles.productInfo}>
               <Text style={[styles.productName, { color: colors.foreground }]} numberOfLines={1}>{product.name}</Text>
               <View style={styles.productMeta}>
@@ -129,11 +86,11 @@ export default function SellerDashboardScreen() {
                     {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
                   </Text>
                 </View>
-                <Text style={[styles.soldText, { color: colors.mutedForeground }]}>{product.sold} sold</Text>
+                <Text style={[styles.soldText, { color: colors.mutedForeground }]}>{product.sales} sold</Text>
               </View>
             </View>
             <View style={styles.productRevenue}>
-              <Text style={[styles.revenueValue, { color: colors.foreground }]}>{formatPrice(product.revenue)}</Text>
+              <Text style={[styles.revenueValue, { color: colors.foreground }]}>{formatPrice(product.sales * product.price)}</Text>
               <Text style={[styles.revenueLabel, { color: colors.mutedForeground }]}>Revenue</Text>
             </View>
             <TouchableOpacity>

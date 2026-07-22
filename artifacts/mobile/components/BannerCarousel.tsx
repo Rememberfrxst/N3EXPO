@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Dimensions, FlatList, Image, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, FlatList, Image, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/Text';
 import { useColors } from '@/hooks/useColors';
 
 const { width } = Dimensions.get('window');

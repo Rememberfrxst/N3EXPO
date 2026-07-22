@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
+import { applyGlobalTypographyFix } from '@/constants/typography';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
@@ -23,6 +23,9 @@ import { useColors } from '@/hooks/useColors';
 
 SplashScreen.preventAutoHideAsync();
 
+// Fix Android font padding that causes text to shift up/down in every component
+applyGlobalTypographyFix();
+
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
@@ -32,7 +35,8 @@ function RootLayoutNav() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.primary,
-        headerTitleStyle: { fontFamily: 'GoogleSans_600SemiBold', fontSize: 17, color: colors.foreground },
+        // @ts-ignore - includeFontPadding is Android-specific but required for custom fonts
+        headerTitleStyle: { fontFamily: 'GoogleSans_600SemiBold', fontSize: 17, color: colors.foreground, includeFontPadding: false },
         headerShadowVisible: false,
         headerBackTitle: '',
       }}
@@ -73,25 +77,23 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider>
+      <ThemeProvider>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
             <LanguageProvider>
               <AuthProvider>
                 <CartProvider>
                   <WishlistProvider>
                     <GestureHandlerRootView style={{ flex: 1 }}>
-                      <KeyboardProvider>
                         <RootLayoutNav />
-                      </KeyboardProvider>
                     </GestureHandlerRootView>
                   </WishlistProvider>
                 </CartProvider>
               </AuthProvider>
             </LanguageProvider>
-          </ThemeProvider>
-        </QueryClientProvider>
-      </ErrorBoundary>
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

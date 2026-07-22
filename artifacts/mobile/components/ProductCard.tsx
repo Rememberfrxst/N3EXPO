@@ -1,6 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Text } from '@/components/Text';
 import Svg, { Path } from 'react-native-svg';
 import { useColors } from '@/hooks/useColors';
 import { Product, formatPrice } from '@/constants/data';
@@ -41,13 +42,8 @@ export default function ProductCard({ product, onPress, isWishlisted = false, on
       onPress={onPress}
       activeOpacity={0.92}
     >
-      {/* Image area — gradient only, no badges */}
-      <LinearGradient
-        colors={product.gradient as string[]}
-        style={styles.image}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
+      {/* Image area */}
+      <Image source={product.image} style={styles.image} contentFit="cover" transition={200} />
 
       {/* Info section */}
       <View style={styles.info}>

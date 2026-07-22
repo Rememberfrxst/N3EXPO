@@ -1,0 +1,1 @@
+const fs = require('fs'); let code = fs.readFileSync('app/order/[id].tsx', 'utf8'); code = code.replace(/<LinearGradient[^>]+>/g, '<Image source={item.image} style={styles.itemImg} />'); code = code.replace(/import \{ LinearGradient \} from 'expo-linear-gradient';/, 'import { Image } from \'expo-image\';'); fs.writeFileSync('app/order/[id].tsx', code);

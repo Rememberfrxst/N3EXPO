@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
+import { Text } from '@/components/Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import SvgIcon from '@/components/SvgIcon';
 import { useColors } from '@/hooks/useColors';
@@ -10,7 +11,7 @@ export default function CategoryCard({ category, onPress }: { category: Category
   return (
     <TouchableOpacity style={styles.wrap} onPress={onPress} activeOpacity={0.8}>
       <LinearGradient
-        colors={[category.color, category.color2] as string[]}
+        colors={[category.color, category.color2] as readonly [string, string]}
         style={styles.icon}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}

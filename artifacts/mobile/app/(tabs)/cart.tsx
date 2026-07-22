@@ -1,13 +1,28 @@
 import React, { useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
+import { TextInput } from '@/components/TextInput';
+import { Text } from '@/components/Text';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import SvgIcon from '@/components/SvgIcon';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useCart } from '@/context/CartContext';
 import { formatPrice } from '@/constants/data';
+
+function BackChevronIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 640 640">
+      <Path
+        fill={color}
+        d="M169.4 297.4C156.9 309.9 156.9 330.2 169.4 342.7L361.4 534.7C373.9 547.2 394.2 547.2 406.7 534.7C419.2 522.2 419.2 501.9 406.7 489.4L237.3 320L406.6 150.6C419.1 138.1 419.1 117.8 406.6 105.3C394.1 92.8 373.8 92.8 361.3 105.3L169.3 297.3z"
+      />
+    </Svg>
+  );
+}
 
 export default function CartScreen() {
   const colors = useColors();
@@ -30,6 +45,9 @@ export default function CartScreen() {
     return (
       <View style={[styles.empty, { backgroundColor: colors.background, paddingTop: topPad + 20 }]}>
         <View style={styles.emptyHeader}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <BackChevronIcon size={20} color={colors.foreground} />
+          </TouchableOpacity>
           <Text style={[styles.screenTitle, { color: colors.foreground }]}>My Cart</Text>
         </View>
         <View style={styles.emptyContent}>
@@ -49,6 +67,9 @@ export default function CartScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: colors.card, borderBottomColor: colors.border, borderBottomWidth: 1 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <BackChevronIcon size={20} color={colors.foreground} />
+        </TouchableOpacity>
         <Text style={[styles.screenTitle, { color: colors.foreground }]}>My Cart ({itemCount})</Text>
       </View>
 
@@ -59,7 +80,7 @@ export default function CartScreen() {
             <View key={item.product.id}>
               {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
               <View style={styles.cartItem}>
-                <LinearGradient colors={item.product.gradient as string[]} style={styles.itemImage} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+                <Image source={item.product.image} style={styles.itemImage} contentFit="cover" transition={200} />
                 <View style={styles.itemInfo}>
                   <Text style={[styles.itemName, { color: colors.foreground }]} numberOfLines={2}>{item.product.name}</Text>
                   <Text style={[styles.itemSeller, { color: colors.mutedForeground }]}>by {item.product.seller}</Text>
@@ -156,14 +177,15 @@ export default function CartScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   empty: { flex: 1 },
-  emptyHeader: { paddingHorizontal: 20, paddingBottom: 10 },
+  emptyHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 10, gap: 12 },
   emptyContent: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyIcon: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: 20, fontFamily: 'GoogleSans_600SemiBold' },
   emptySubtitle: { fontSize: 14, fontFamily: 'GoogleSans_400Regular' },
   shopBtn: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 12, marginTop: 8 },
   shopBtnText: { fontSize: 16, fontFamily: 'GoogleSans_600SemiBold' },
-  header: { paddingHorizontal: 20, paddingBottom: 14 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14, gap: 12 },
+  backBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   screenTitle: { fontSize: 22, fontFamily: 'GoogleSans_700Bold' },
   section: { padding: 16 },
   divider: { height: 1, marginHorizontal: 0 },

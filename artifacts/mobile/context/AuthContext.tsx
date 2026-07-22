@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Address, User } from '@/constants/data';
+import { api, saveTokens, clearTokens, getAccessToken, ApiUser } from '@/services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -10,106 +11,132 @@ interface AuthContextType {
   logout: () => Promise<void>;
   addAddress: (address: Omit<Address, 'id'>) => Promise<void>;
   setDefaultAddress: (id: string) => Promise<void>;
-  becomeSeller: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const STORAGE_KEY = '@griper_user';
+const STORAGE_KEY = '@griper_user_cache';
+
+function mapApiUser(apiUser: ApiUser, addresses: any[] = []): User {
+  return {
+    id: apiUser.id,
+    name: apiUser.name,
+    email: apiUser.email,
+    phone: apiUser.phone ?? '',
+    addresses: addresses.map(a => ({
+      id: a.id,
+      name: apiUser.name,
+      line1: a.line1,
+      line2: a.line2,
+      city: a.city,
+      state: a.state,
+      pincode: a.pincode,
+      phone: apiUser.phone ?? '',
+      isDefault: a.isDefault,
+    })),
+    role: apiUser.role === 'admin' ? 'admin' : 'user',
+  };
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const apiUser = await api.auth.me();
+      let addresses: any[] = [];
+      try {
+        addresses = await api.addresses.list();
+      } catch (e) {
+        console.log('Failed to fetch addresses', e);
+      }
+      const mappedUser = mapApiUser(apiUser, addresses);
+      setUser(mappedUser);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(mappedUser));
+    } catch (e) {
+      console.log('Failed to refresh user', e);
+    }
+  }, []);
+
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await AsyncStorage.getItem(STORAGE_KEY);
-        if (data) setUser(JSON.parse(data) as User);
-      } catch {}
-      setIsLoading(false);
+        const cachedUser = await AsyncStorage.getItem(STORAGE_KEY);
+        if (cachedUser) setUser(JSON.parse(cachedUser) as User);
+        
+        const token = await getAccessToken();
+        if (token) {
+          await refreshUser();
+        }
+      } catch (e) {
+        console.log('Load auth error', e);
+      } finally {
+        setIsLoading(false);
+      }
     };
     load();
-  }, []);
+  }, [refreshUser]);
 
-  const save = async (u: User | null) => {
-    if (u) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(u));
-    else await AsyncStorage.removeItem(STORAGE_KEY);
-  };
-
-  const login = useCallback(async (email: string, _password: string): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     if (!email) return false;
-    const newUser: User = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      name: email.split('@')[0] ?? 'User',
-      email,
-      phone: '+91 98765 43210',
-      addresses: [
-        {
-          id: 'addr1',
-          name: email.split('@')[0] ?? 'User',
-          line1: '42 MG Road, Koramangala',
-          city: 'Bangalore',
-          state: 'Karnataka',
-          pincode: '560034',
-          phone: '+91 98765 43210',
-          isDefault: true,
-        },
-      ],
-      isSeller: false,
-    };
-    await save(newUser);
-    setUser(newUser);
-    return true;
-  }, []);
+    try {
+      const res = await api.auth.login(email, password);
+      await saveTokens(res.accessToken, res.refreshToken);
+      await refreshUser();
+      return true;
+    } catch (e) {
+      console.log('Login error', e);
+      return false;
+    }
+  }, [refreshUser]);
 
-  const register = useCallback(async (name: string, email: string, phone: string, _password: string): Promise<boolean> => {
+  const register = useCallback(async (name: string, email: string, phone: string, password: string): Promise<boolean> => {
     if (!name || !email) return false;
-    const newUser: User = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      name,
-      email,
-      phone,
-      addresses: [],
-      isSeller: false,
-    };
-    await save(newUser);
-    setUser(newUser);
-    return true;
-  }, []);
+    try {
+      const res = await api.auth.register(name, email, phone, password);
+      await saveTokens(res.accessToken, res.refreshToken);
+      await refreshUser();
+      return true;
+    } catch (e) {
+      console.log('Register error', e);
+      return false;
+    }
+  }, [refreshUser]);
 
   const logout = useCallback(async () => {
-    await save(null);
+    try {
+      await api.auth.logout();
+    } catch (e) {
+      // Ignore errors on logout
+    }
+    await clearTokens();
+    await AsyncStorage.removeItem(STORAGE_KEY);
     setUser(null);
   }, []);
 
   const addAddress = useCallback(async (address: Omit<Address, 'id'>) => {
-    if (!user) return;
-    const newAddr: Address = { ...address, id: Date.now().toString() };
-    const updated = { ...user, addresses: [...user.addresses, newAddr] };
-    await save(updated);
-    setUser(updated);
-  }, [user]);
+    try {
+      await api.addresses.add(address);
+      await refreshUser();
+    } catch (e) {
+      console.log('Add address error', e);
+    }
+  }, [refreshUser]);
 
   const setDefaultAddress = useCallback(async (id: string) => {
-    if (!user) return;
-    const updated = {
-      ...user,
-      addresses: user.addresses.map(a => ({ ...a, isDefault: a.id === id })),
-    };
-    await save(updated);
-    setUser(updated);
-  }, [user]);
+    try {
+      await api.addresses.setDefault(id);
+      await refreshUser();
+    } catch (e) {
+      console.log('Set default address error', e);
+    }
+  }, [refreshUser]);
 
-  const becomeSeller = useCallback(async () => {
-    if (!user) return;
-    const updated = { ...user, isSeller: true };
-    await save(updated);
-    setUser(updated);
-  }, [user]);
+
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, addAddress, setDefaultAddress, becomeSeller }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, addAddress, setDefaultAddress }}>
       {children}
     </AuthContext.Provider>
   );

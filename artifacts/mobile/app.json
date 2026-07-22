@@ -14,9 +14,16 @@
       "backgroundColor": "#DC2626"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
-    "android": {},
+    "android": {
+      "usesCleartextTraffic": true
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '@/components/Text';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SvgIcon from '@/components/SvgIcon';
@@ -15,15 +16,16 @@ interface MenuItem {
   color?: string;
 }
 
-function MenuRow({ icon, label, sub, onPress, color }: MenuItem) {
+function MenuRow({ label, sub, onPress, color }: Omit<MenuItem, 'icon'>) {
   const colors = useColors();
   return (
-    <TouchableOpacity style={[styles.menuRow, { borderBottomColor: colors.border }]} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.menuIcon, { backgroundColor: (color || colors.primary) + '18' }]}>
-        <SvgIcon name={icon as any} size={20} color={color || colors.primary} />
-      </View>
+    <TouchableOpacity
+      style={[styles.menuRow, { borderBottomColor: colors.border }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       <View style={styles.menuLabel}>
-        <Text style={[styles.menuText, { color: colors.foreground }]}>{label}</Text>
+        <Text style={[styles.menuText, { color: color || colors.foreground }]}>{label}</Text>
         {sub && <Text style={[styles.menuSub, { color: colors.mutedForeground }]}>{sub}</Text>}
       </View>
       <SvgIcon name="chevron-forward" size={16} color={colors.mutedForeground} />
@@ -33,7 +35,11 @@ function MenuRow({ icon, label, sub, onPress, color }: MenuItem) {
 
 function SectionHeader({ title }: { title: string }) {
   const colors = useColors();
-  return <Text style={[styles.sectionHeader, { color: colors.mutedForeground, backgroundColor: colors.background }]}>{title.toUpperCase()}</Text>;
+  return (
+    <Text style={[styles.sectionHeader, { color: colors.mutedForeground, backgroundColor: colors.background }]}>
+      {title.toUpperCase()}
+    </Text>
+  );
 }
 
 export default function ProfileScreen() {
@@ -70,15 +76,15 @@ export default function ProfileScreen() {
               <Text style={styles.userEmail}>{user.email}</Text>
               {user.phone && <Text style={styles.userPhone}>{user.phone}</Text>}
             </View>
-            {user.isSeller && (
+            {user.role === 'admin' && (
               <View style={styles.sellerBadge}>
-                <SvgIcon name="storefront" size={14} color="#fff" />
-                <Text style={styles.sellerBadgeText}>Seller</Text>
+                <SvgIcon name="shield-checkmark" size={14} color="#fff" />
+                <Text style={styles.sellerBadgeText}>Admin</Text>
               </View>
             )}
           </View>
         ) : (
-          <View style={[styles.guestCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.guestCard}>
             <View style={[styles.guestAvatar, { backgroundColor: colors.muted }]}>
               <SvgIcon name="person-outline" size={40} color={colors.mutedForeground} />
             </View>
@@ -97,33 +103,33 @@ export default function ProfileScreen() {
 
         {/* Shopping Section */}
         <SectionHeader title="Shopping" />
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
-          <MenuRow icon="heart-outline" label="Wishlist" sub="Saved items" onPress={() => router.push('/wishlist')} />
-          <MenuRow icon="bag-outline" label="My Orders" sub="Track & manage orders" onPress={() => router.push('/orders')} />
-          <MenuRow icon="location-outline" label="My Addresses" sub={user?.addresses.length ? `${user.addresses.length} saved` : 'No addresses'} onPress={() => { if (!user) router.push('/auth/login'); }} />
-          <MenuRow icon="card-outline" label="Payment Methods" sub="UPI, Cards & more" onPress={() => { if (!user) router.push('/auth/login'); }} />
+        <View style={styles.section}>
+          <MenuRow label="Wishlist"         sub="Saved items"             onPress={() => router.push('/wishlist')} />
+          <MenuRow label="My Orders"        sub="Track & manage orders"   onPress={() => router.push('/orders')} />
+          <MenuRow label="My Addresses"     sub={user?.addresses.length ? `${user.addresses.length} saved` : 'No addresses'} onPress={() => { if (!user) router.push('/auth/login'); }} />
+          <MenuRow label="Payment Methods"  sub="UPI, Cards & more"       onPress={() => { if (!user) router.push('/auth/login'); }} />
         </View>
 
-        {/* Seller Section */}
-        <SectionHeader title="Seller" />
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
-          <MenuRow
-            icon="storefront-outline"
-            label={user?.isSeller ? 'Seller Dashboard' : 'Become a Seller'}
-            sub={user?.isSeller ? 'Manage your store' : 'Start selling on Griper'}
-            onPress={() => { if (user) router.push('/seller'); else router.push('/auth/login'); }}
-            color="#7C3AED"
-          />
-        </View>
+        {/* Admin Section */}
+        {user?.role === 'admin' && (
+          <>
+            <SectionHeader title="Admin" />
+            <View style={styles.section}>
+              <MenuRow
+                label="Admin Dashboard"
+                sub="Manage products and store"
+                onPress={() => router.push('/seller')} // Temporary route to seller dashboard
+                color="#7C3AED"
+              />
+            </View>
+          </>
+        )}
 
         {/* Preferences Section */}
         <SectionHeader title="Preferences" />
-        <View style={[styles.section, { backgroundColor: colors.card }]}>
+        <View style={styles.section}>
           {/* Language picker inline */}
           <View style={[styles.langSection, { borderBottomColor: colors.border }]}>
-            <View style={[styles.menuIcon, { backgroundColor: colors.primary + '18' }]}>
-              <SvgIcon name="language-outline" size={20} color={colors.primary} />
-            </View>
             <View style={styles.menuLabel}>
               <Text style={[styles.menuText, { color: colors.foreground }]}>Language</Text>
               <Text style={[styles.menuSub, { color: colors.mutedForeground }]}>
@@ -138,7 +144,7 @@ export default function ProfileScreen() {
                     styles.langPill,
                     {
                       backgroundColor: language === lang ? colors.primary : colors.muted,
-                      borderColor: language === lang ? colors.primary : colors.border,
+                      borderColor:     language === lang ? colors.primary : colors.border,
                     },
                   ]}
                   onPress={() => setLanguage(lang)}
@@ -151,21 +157,24 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <MenuRow icon="settings-outline" label="Settings" sub="Theme, notifications & more" onPress={() => router.push('/settings')} />
-          <MenuRow icon="help-circle-outline" label="Help & Support" sub="FAQ, Contact us" onPress={() => {}} />
-          <MenuRow icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => {}} />
-          <MenuRow icon="document-text-outline" label="Terms of Service" onPress={() => {}} />
+          <MenuRow label="Settings"        sub="Theme, notifications & more" onPress={() => router.push('/settings')} />
+          <MenuRow label="Help & Support"   sub="FAQ, Contact us"             onPress={() => {}} />
+          <MenuRow label="Privacy Policy"   onPress={() => {}} />
+          <MenuRow label="Terms of Service" onPress={() => {}} />
         </View>
 
         {/* App Info */}
-        <View style={[styles.appInfo, { backgroundColor: colors.card }]}>
-          <Text style={[styles.appName, { color: colors.foreground }]}>GRIPER</Text>
+        <View style={styles.appInfo}>
+          <Text style={[styles.appName,    { color: colors.foreground }]}>GRIPER</Text>
           <Text style={[styles.appVersion, { color: colors.mutedForeground }]}>Version 1.0.0 • India & Global</Text>
         </View>
 
         {/* Sign Out */}
         {user && (
-          <TouchableOpacity style={[styles.signOutBtn, { backgroundColor: colors.card, borderColor: colors.destructive }]} onPress={handleLogout}>
+          <TouchableOpacity
+            style={[styles.signOutBtn, { borderColor: colors.destructive }]}
+            onPress={handleLogout}
+          >
             <SvgIcon name="log-out-outline" size={20} color={colors.destructive} />
             <Text style={[styles.signOutText, { color: colors.destructive }]}>Sign Out</Text>
           </TouchableOpacity>
@@ -178,41 +187,54 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 14 },
-  title: { fontSize: 22, fontFamily: 'GoogleSans_700Bold' },
-  userCard: { padding: 20, flexDirection: 'row', alignItems: 'center', gap: 14 },
-  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 26, fontFamily: 'GoogleSans_700Bold', color: '#fff' },
-  userInfo: { flex: 1 },
-  userName: { fontSize: 18, fontFamily: 'GoogleSans_700Bold', color: '#fff' },
-  userEmail: { fontSize: 13, fontFamily: 'GoogleSans_400Regular', color: 'rgba(255,255,255,0.85)', marginTop: 2 },
-  userPhone: { fontSize: 13, fontFamily: 'GoogleSans_400Regular', color: 'rgba(255,255,255,0.75)', marginTop: 1 },
-  sellerBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  sellerBadgeText: { fontSize: 11, fontFamily: 'GoogleSans_600SemiBold', color: '#fff' },
-  guestCard: { margin: 16, borderRadius: 16, padding: 24, alignItems: 'center', gap: 10, borderWidth: 1 },
-  guestAvatar: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
-  guestTitle: { fontSize: 18, fontFamily: 'GoogleSans_600SemiBold' },
-  guestSubtitle: { fontSize: 13, fontFamily: 'GoogleSans_400Regular', textAlign: 'center' },
-  authBtns: { flexDirection: 'row', gap: 12, marginTop: 6 },
-  loginBtn: { paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10 },
-  loginBtnText: { fontSize: 15, fontFamily: 'GoogleSans_600SemiBold' },
-  registerBtn: { paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5 },
-  registerBtnText: { fontSize: 15, fontFamily: 'GoogleSans_600SemiBold' },
-  sectionHeader: { fontSize: 11, fontFamily: 'GoogleSans_600SemiBold', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 6, letterSpacing: 1 },
-  section: { overflow: 'hidden' },
-  menuRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: 1 },
-  menuIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  menuLabel: { flex: 1 },
-  menuText: { fontSize: 15, fontFamily: 'GoogleSans_500Medium' },
-  menuSub: { fontSize: 12, fontFamily: 'GoogleSans_400Regular', marginTop: 2 },
-  langSection: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12, borderBottomWidth: 1 },
-  langPills: { flexDirection: 'row', gap: 6 },
-  langPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
-  langPillText: { fontSize: 12, fontFamily: 'GoogleSans_700Bold' },
-  appInfo: { marginTop: 8, padding: 20, alignItems: 'center', gap: 4 },
-  appName: { fontSize: 16, fontFamily: 'GoogleSans_700Bold', letterSpacing: 2 },
-  appVersion: { fontSize: 12, fontFamily: 'GoogleSans_400Regular' },
-  signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, margin: 16, padding: 14, borderRadius: 12, borderWidth: 1.5 },
-  signOutText: { fontSize: 15, fontFamily: 'GoogleSans_600SemiBold' },
+  container:        { flex: 1 },
+  header:           { paddingHorizontal: 20, paddingBottom: 14 },
+  title:            { fontSize: 22, fontFamily: 'GoogleSans_700Bold' },
+
+  /* User card */
+  userCard:         { padding: 20, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  avatar:           { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  avatarText:       { fontSize: 26, fontFamily: 'GoogleSans_700Bold', color: '#fff' },
+  userInfo:         { flex: 1 },
+  userName:         { fontSize: 18, fontFamily: 'GoogleSans_700Bold', color: '#fff' },
+  userEmail:        { fontSize: 13, fontFamily: 'GoogleSans_400Regular', color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+  userPhone:        { fontSize: 13, fontFamily: 'GoogleSans_400Regular', color: 'rgba(255,255,255,0.75)', marginTop: 1 },
+  sellerBadge:      { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  sellerBadgeText:  { fontSize: 11, fontFamily: 'GoogleSans_600SemiBold', color: '#fff' },
+
+  /* Guest card */
+  guestCard:        { margin: 16, paddingVertical: 8, alignItems: 'center', gap: 10 },
+  guestAvatar:      { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
+  guestTitle:       { fontSize: 18, fontFamily: 'GoogleSans_600SemiBold' },
+  guestSubtitle:    { fontSize: 13, fontFamily: 'GoogleSans_400Regular', textAlign: 'center' },
+  authBtns:         { flexDirection: 'row', gap: 12, marginTop: 6 },
+  loginBtn:         { paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10 },
+  loginBtnText:     { fontSize: 15, fontFamily: 'GoogleSans_600SemiBold' },
+  registerBtn:      { paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5 },
+  registerBtnText:  { fontSize: 15, fontFamily: 'GoogleSans_600SemiBold' },
+
+  /* Section */
+  sectionHeader:    { fontSize: 11, fontFamily: 'GoogleSans_600SemiBold', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 6, letterSpacing: 1 },
+  section:          { overflow: 'hidden' },
+
+  /* Menu rows — no icon bg box */
+  menuRow:          { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 14, borderBottomWidth: 1 },
+  menuLabel:        { flex: 1 },
+  menuText:         { fontSize: 15, fontFamily: 'GoogleSans_500Medium' },
+  menuSub:          { fontSize: 12, fontFamily: 'GoogleSans_400Regular', marginTop: 2 },
+
+  /* Language row */
+  langSection:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 14, borderBottomWidth: 1 },
+  langPills:        { flexDirection: 'row', gap: 6 },
+  langPill:         { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
+  langPillText:     { fontSize: 12, fontFamily: 'GoogleSans_700Bold' },
+
+  /* App info */
+  appInfo:          { marginTop: 8, padding: 20, alignItems: 'center', gap: 4 },
+  appName:          { fontSize: 16, fontFamily: 'GoogleSans_700Bold', letterSpacing: 2 },
+  appVersion:       { fontSize: 12, fontFamily: 'GoogleSans_400Regular' },
+
+  /* Sign out */
+  signOutBtn:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, margin: 16, padding: 14, borderRadius: 12, borderWidth: 1.5 },
+  signOutText:      { fontSize: 15, fontFamily: 'GoogleSans_600SemiBold' },
 });

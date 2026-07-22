@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { TextInput } from '@/components/TextInput';
 import SvgIcon from '@/components/SvgIcon';
 import { useColors } from '@/hooks/useColors';
 

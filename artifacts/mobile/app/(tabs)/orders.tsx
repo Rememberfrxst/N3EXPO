@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Platform, ScrollView, StyleSheet, TouchableOpacity, View, Image, ActivityIndicator } from 'react-native';
+import { Text } from '@/components/Text';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import SvgIcon from '@/components/SvgIcon';
 import { useColors } from '@/hooks/useColors';
-import { useCart } from '@/context/CartContext';
 import { formatPrice, Order } from '@/constants/data';
+import { api } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 const STATUS_COLORS: Record<Order['status'], string> = {
   pending: '#F59E0B',
@@ -58,7 +60,7 @@ function OrderCard({ order }: { order: Order }) {
       </View>
       <View style={styles.itemsRow}>
         {order.items.slice(0, 3).map((item, i) => (
-          <LinearGradient key={i} colors={item.gradient as string[]} style={styles.miniImage} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+          <Image key={i} source={{ uri: item.image }} style={styles.miniImage} resizeMode="cover" />
         ))}
         {order.items.length > 3 && (
           <View style={[styles.moreItems, { backgroundColor: colors.muted }]}>
@@ -90,10 +92,62 @@ function OrderCard({ order }: { order: Order }) {
 export default function OrdersScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { orders } = useCart();
   const isWeb = Platform.OS === 'web';
   const topPad = isWeb ? 67 : insets.top;
   const [tab, setTab] = useState<'active' | 'past'>('active');
+
+  const { user } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchOrders = useCallback(async () => {
+    if (!user) { setOrders([]); return; }
+    setLoading(true);
+    try {
+      const data = await api.orders.list();
+      setOrders(data.map((o: any) => ({
+        id: o.id,
+        items: (o.items ?? []).map((i: any) => ({
+          productId: i.productId,
+          name: i.product?.name ?? 'Product',
+          price: parseFloat(i.unitPrice) || 0,
+          quantity: i.quantity,
+          image: i.product?.images?.[0]?.url ?? '',
+        })),
+        total: parseFloat(o.total) || 0,
+        status: o.status,
+        date: o.createdAt,
+        estimatedDelivery: o.estimatedDelivery ?? '',
+        paymentMethod: o.paymentMethod,
+        address: { id: '', name: '', line1: '', city: '', state: '', pincode: '', phone: '', isDefault: false },
+      })));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  if (!user) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: colors.card, borderBottomColor: colors.border, borderBottomWidth: 1 }]}>
+          <Text style={[styles.title, { color: colors.foreground }]}>My Orders</Text>
+        </View>
+        <View style={[styles.empty, { flex: 1, justifyContent: 'center', paddingTop: 0 }]}>
+          <View style={[styles.emptyIcon, { backgroundColor: colors.muted }]}>
+            <SvgIcon name="person-outline" size={48} color={colors.mutedForeground} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Sign in to view your orders</Text>
+          <TouchableOpacity style={[styles.shopBtn, { backgroundColor: colors.primary }]} onPress={() => router.push('/auth/login')}>
+            <Text style={[styles.shopBtnText, { color: colors.primaryForeground }]}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const active = orders.filter(o => !['delivered', 'cancelled'].includes(o.status));
   const past = orders.filter(o => ['delivered', 'cancelled'].includes(o.status));
@@ -123,23 +177,29 @@ export default function OrdersScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
-        {shown.length === 0 ? (
-          <View style={styles.empty}>
-            <View style={[styles.emptyIcon, { backgroundColor: colors.muted }]}>
-              <SvgIcon name="bag-outline" size={48} color={colors.mutedForeground} />
+      {loading && orders.length === 0 ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
+          {shown.length === 0 ? (
+            <View style={styles.empty}>
+              <View style={[styles.emptyIcon, { backgroundColor: colors.muted }]}>
+                <SvgIcon name="bag-outline" size={48} color={colors.mutedForeground} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No orders yet</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>Your {tab} orders will appear here</Text>
+              <TouchableOpacity style={[styles.shopBtn, { backgroundColor: colors.primary }]} onPress={() => router.push('/')}>
+                <Text style={[styles.shopBtnText, { color: colors.primaryForeground }]}>Start Shopping</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No orders yet</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>Your {tab} orders will appear here</Text>
-            <TouchableOpacity style={[styles.shopBtn, { backgroundColor: colors.primary }]} onPress={() => router.push('/')}>
-              <Text style={[styles.shopBtnText, { color: colors.primaryForeground }]}>Start Shopping</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          shown.map(order => <OrderCard key={order.id} order={order} />)
-        )}
-        <View style={{ height: isWeb ? 100 : 100 }} />
-      </ScrollView>
+          ) : (
+            shown.map(order => <OrderCard key={order.id} order={order} />)
+          )}
+          <View style={{ height: isWeb ? 100 : 100 }} />
+        </ScrollView>
+      )}
     </View>
   );
 }

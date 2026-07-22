@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { FlatList, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '@/components/Text';
 import { useLocalSearchParams, router } from 'expo-router';
 import SvgIcon from '@/components/SvgIcon';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
-import { CATEGORIES, PRODUCTS } from '@/constants/data';
+import { Product, Category } from '@/constants/data';
+import { api, mapApiProduct, mapApiCategory } from '@/services/api';
 import { useWishlist } from '@/context/WishlistContext';
 import ProductCard from '@/components/ProductCard';
 
@@ -21,19 +23,37 @@ export default function CategoryScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { toggle, isInWishlist } = useWishlist();
   const [sortBy, setSortBy] = useState('default');
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [category, setCategory] = useState<Category | null>(null);
+  const [loading, setLoading] = useState(true);
   const isWeb = Platform.OS === 'web';
 
-  const category = CATEGORIES.find(c => c.slug === slug);
+  useEffect(() => {
+    if (!slug) return;
+    setLoading(true);
+    Promise.all([
+      api.products.list({ category: slug, limit: 50 }),
+      api.categories.list(),
+    ])
+      .then(([prodsData, catsData]) => {
+        setAllProducts(prodsData.data.map(mapApiProduct));
+        const cat = catsData.find(c => c.slug === slug);
+        if (cat) setCategory(mapApiCategory(cat));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [slug]);
+
   const products = useMemo(() => {
-    let list = PRODUCTS.filter(p => p.category === slug);
+    let list = [...allProducts];
     switch (sortBy) {
-      case 'price_asc': list = [...list].sort((a, b) => a.price - b.price); break;
-      case 'price_desc': list = [...list].sort((a, b) => b.price - a.price); break;
-      case 'rating': list = [...list].sort((a, b) => b.rating - a.rating); break;
-      case 'discount': list = [...list].sort((a, b) => b.discount - a.discount); break;
+      case 'price_asc': list = list.sort((a, b) => a.price - b.price); break;
+      case 'price_desc': list = list.sort((a, b) => b.price - a.price); break;
+      case 'rating': list = list.sort((a, b) => b.rating - a.rating); break;
+      case 'discount': list = list.sort((a, b) => b.discount - a.discount); break;
     }
     return list;
-  }, [slug, sortBy]);
+  }, [allProducts, sortBy]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -45,7 +65,11 @@ export default function CategoryScreen() {
         columnWrapperStyle={styles.row}
         ListHeaderComponent={
           <View>
-            {category && (
+            {loading ? (
+              <View style={styles.loadingHeader}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : category ? (
               <View style={[styles.hero, { backgroundColor: category.color + '22' }]}>
                 <View style={[styles.heroIcon, { backgroundColor: category.color }]}>
                   <SvgIcon name={category.icon as any} size={32} color="#fff" />
@@ -53,7 +77,7 @@ export default function CategoryScreen() {
                 <Text style={[styles.heroTitle, { color: colors.foreground }]}>{category.name}</Text>
                 <Text style={[styles.heroCount, { color: colors.mutedForeground }]}>{products.length} products</Text>
               </View>
-            )}
+            ) : null}
             <FlatList
               data={SORT_OPTIONS}
               keyExtractor={i => i.key}
@@ -74,12 +98,14 @@ export default function CategoryScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No products found</Text>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Text style={[styles.back, { color: colors.primary }]}>Go Back</Text>
-            </TouchableOpacity>
-          </View>
+          loading ? null : (
+            <View style={styles.empty}>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No products found</Text>
+              <TouchableOpacity onPress={() => router.back()}>
+                <Text style={[styles.back, { color: colors.primary }]}>Go Back</Text>
+              </TouchableOpacity>
+            </View>
+          )
         }
         renderItem={({ item }) => (
           <ProductCard
@@ -99,6 +125,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   grid: { padding: 12, gap: 10 },
   row: { gap: 10 },
+  loadingHeader: { padding: 20, alignItems: 'center' },
   hero: { margin: 0, marginBottom: 12, padding: 20, alignItems: 'center', gap: 8 },
   heroIcon: { width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   heroTitle: { fontSize: 22, fontFamily: 'GoogleSans_700Bold' },

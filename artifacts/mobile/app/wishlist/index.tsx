@@ -1,5 +1,6 @@
 import React from 'react';
-import { FlatList, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '@/components/Text';
 import { router } from 'expo-router';
 import SvgIcon from '@/components/SvgIcon';
 import * as Haptics from 'expo-haptics';

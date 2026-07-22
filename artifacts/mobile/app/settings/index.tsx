@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { Text } from '@/components/Text';
 import SvgIcon from '@/components/SvgIcon';
 import { useColors } from '@/hooks/useColors';
 import { useTheme, ThemeMode } from '@/context/ThemeContext';
@@ -24,7 +25,7 @@ export default function SettingsScreen() {
       showsVerticalScrollIndicator={false}
     >
       {/* Theme */}
-      <View style={[styles.section, { backgroundColor: colors.card }]}>
+      <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>APPEARANCE</Text>
         <View style={styles.themeGrid}>
           {THEME_OPTIONS.map(opt => {
@@ -35,15 +36,34 @@ export default function SettingsScreen() {
                 style={[
                   styles.themeCard,
                   {
-                    backgroundColor: active ? colors.primary + '18' : colors.muted,
+                    backgroundColor:
+                      opt.mode === 'light'
+                        ? '#F8F8F4'
+                        : opt.mode === 'dark'
+                          ? '#111111'
+                          : colors.muted,
                     borderColor: active ? colors.primary : colors.border,
                     borderWidth: active ? 2 : 1,
+                    shadowColor: active ? colors.primary : 'transparent',
+                    shadowOpacity: active ? 0.18 : 0,
+                    shadowRadius: active ? 8 : 0,
+                    shadowOffset: { width: 0, height: 2 },
                   },
                 ]}
                 onPress={() => setTheme(opt.mode)}
                 activeOpacity={0.8}
               >
-                <View style={[styles.themeIconWrap, { backgroundColor: active ? colors.primary : colors.background }]}>
+                <View style={[
+                  styles.themeIconWrap,
+                  {
+                    backgroundColor:
+                      opt.mode === 'light'
+                        ? '#FFE8B5'
+                        : opt.mode === 'dark'
+                          ? '#2A2A2A'
+                          : colors.background,
+                  },
+                ]}>
                   <SvgIcon name={opt.icon as any} size={22} color={active ? '#fff' : colors.mutedForeground} />
                 </View>
                 <Text style={[styles.themeLabel, { color: active ? colors.primary : colors.foreground }]}>
@@ -64,7 +84,7 @@ export default function SettingsScreen() {
       </View>
 
       {/* Notifications */}
-      <View style={[styles.section, { backgroundColor: colors.card, marginTop: 8 }]}>
+      <View style={[styles.section, { marginTop: 8 }]}>
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>NOTIFICATIONS</Text>
         {[
           { label: 'All Notifications', value: notifications, setter: setNotifications, sub: 'Receive all app notifications', icon: 'notifications-outline' },
@@ -90,7 +110,7 @@ export default function SettingsScreen() {
       </View>
 
       {/* Legal */}
-      <View style={[styles.section, { backgroundColor: colors.card, marginTop: 8 }]}>
+      <View style={[styles.section, { marginTop: 8 }]}>
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>LEGAL</Text>
         {[
           { label: 'Privacy Policy', icon: 'shield-outline' },
@@ -109,7 +129,7 @@ export default function SettingsScreen() {
       </View>
 
       {/* About */}
-      <View style={[styles.section, { backgroundColor: colors.card, marginTop: 8 }]}>
+      <View style={[styles.section, { marginTop: 8 }]}>
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>ABOUT</Text>
         {[
           { label: 'Help & Support', icon: 'headset-outline' },
@@ -127,7 +147,7 @@ export default function SettingsScreen() {
       </View>
 
       {/* App Info */}
-      <View style={[styles.appInfo, { backgroundColor: colors.card, marginTop: 8 }]}>
+      <View style={[styles.appInfo, { marginTop: 8 }]}>
         <View style={[styles.appLogo, { backgroundColor: colors.primary }]}>
           <Text style={styles.appLogoText}>G</Text>
         </View>

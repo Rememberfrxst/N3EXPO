@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '@/components/Text';
 import { useColors } from '@/hooks/useColors';
 import { BlurView } from 'expo-blur';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
@@ -62,7 +63,7 @@ function DiamondCartButton(props: any) {
         >
           {/* Counter-rotate icon so it stays upright */}
           <View style={styles.diamondIcon}>
-            <CartIconNew color="#fff" size={22} />
+            <CartIconNew color="#fff" size={26} />
           </View>
         </View>
 
@@ -94,7 +95,7 @@ function NativeTabLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="cart">
         <Icon sf={{ default: 'bag', selected: 'bag.fill' }} />
-        <Label>Cart{itemCount > 0 ? ` (${itemCount})` : ''}</Label>
+        <Label>{`Cart${itemCount > 0 ? ` (${itemCount})` : ''}`}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="orders">
         <Icon sf={{ default: 'list.clipboard', selected: 'list.clipboard.fill' }} />
@@ -118,13 +119,13 @@ function ClassicTabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
+        tabBarInactiveTintColor: isDark ? '#F4F4F4' : colors.mutedForeground,
         headerShown: false,
         tabBarStyle: {
           position: 'absolute',
           backgroundColor: isIOS ? 'transparent' : colors.card,
-          borderTopWidth: 1,
+          
           borderTopColor: colors.border,
           elevation: 0,
           overflow: 'visible',      // lets the diamond float above the bar
@@ -140,7 +141,8 @@ function ClassicTabLayout() {
           ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]} />
           ),
-        tabBarLabelStyle: { fontFamily: 'GoogleSans_500Medium', fontSize: 11 },
+        // @ts-ignore - includeFontPadding is Android-specific
+        tabBarLabelStyle: { fontFamily: 'GoogleSans_500Medium', fontSize: 11, includeFontPadding: false },
       }}
     >
       <Tabs.Screen
@@ -169,6 +171,7 @@ function ClassicTabLayout() {
         name="cart"
         options={{
           title: '',
+          tabBarStyle: { display: 'none' },
           tabBarLabel: () => null,
           tabBarButton: (props) => <DiamondCartButton {...props} />,
         }}

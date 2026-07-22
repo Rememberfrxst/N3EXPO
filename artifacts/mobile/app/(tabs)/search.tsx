@@ -1,13 +1,15 @@
-import React, { useState, useMemo } from 'react';
-import { FlatList, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useMemo, useEffect } from 'react';
+import { FlatList, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '@/components/Text';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
-import { PRODUCTS, CATEGORIES, Product } from '@/constants/data';
+import { Product } from '@/constants/data';
 import { useWishlist } from '@/context/WishlistContext';
 import SearchBarInput from '@/components/SearchBarInput';
 import ProductCard from '@/components/ProductCard';
+import { api, mapApiProduct, mapApiCategory } from '@/services/api';
 
 const SORT_OPTIONS = [
   { key: 'relevance', label: 'Relevance' },
@@ -27,9 +29,17 @@ export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState('relevance');
   const [selectedCat, setSelectedCat] = useState('');
+  
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.products.list({ limit: 100 }).then(r => setAllProducts(r.data.map(mapApiProduct))).catch(console.error);
+    api.categories.list().then(cats => setCategories(cats.map(mapApiCategory))).catch(console.error);
+  }, []);
 
   const filtered = useMemo(() => {
-    let results = [...PRODUCTS];
+    let results = [...allProducts];
     if (query.trim()) {
       const q = query.toLowerCase();
       results = results.filter(p =>
@@ -49,7 +59,7 @@ export default function SearchScreen() {
       case 'discount': results.sort((a, b) => b.discount - a.discount); break;
     }
     return results;
-  }, [query, sortBy, selectedCat]);
+  }, [query, sortBy, selectedCat, allProducts]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -82,7 +92,7 @@ export default function SearchScreen() {
         />
         {/* Category filter */}
         <FlatList
-          data={[{ id: '', name: 'All', slug: '', icon: '', color: '', color2: '' }, ...CATEGORIES]}
+          data={[{ id: '', name: 'All', slug: '', icon: '', color: '', color2: '' }, ...categories]}
           keyExtractor={i => i.id || 'all'}
           horizontal
           showsHorizontalScrollIndicator={false}
