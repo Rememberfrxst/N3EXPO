@@ -2,11 +2,13 @@ import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useCart } from "@/context/CartContext";
 export default function TabLayout() {
   const c = useColors(),
-    cart = useCart();
+    cart = useCart(),
+    insets = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
@@ -16,9 +18,12 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: c.card,
           borderTopColor: c.border,
-          height: Platform.OS === "web" ? 70 : undefined,
+          borderTopWidth: 1,
+          display: "flex",
+          height: Platform.OS === "web" ? 70 : 64 + insets.bottom,
           paddingTop: 6,
-          paddingBottom: Platform.OS === "web" ? 7 : undefined,
+          paddingBottom: Platform.OS === "web" ? 7 : Math.max(insets.bottom, 8),
+          elevation: 12,
         },
         tabBarLabelStyle: {
           fontFamily: "GoogleSans_500Medium",
@@ -45,7 +50,7 @@ export default function TabLayout() {
           title: "Category",
           tabBarAccessibilityLabel: "Category",
           tabBarIcon: ({ color }) => (
-            <Ionicons name="search-outline" size={27} color={color} />
+            <Ionicons name="grid-outline" size={25} color={color} />
           ),
         }}
       />

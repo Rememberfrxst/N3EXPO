@@ -113,14 +113,13 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/griper pnpm --filter 
 
 For a migration-managed database, apply the SQL migrations under `lib/db/drizzle/` in journal order using your migration process. `0001_store_settings.sql` also covers earlier audit/2FA schema additions and tolerates those objects already existing. Back up existing data before production schema changes.
 
-Optional sample catalog:
+Complete demo catalog (30 products, eight categories, variants, banners and coupons):
 
 ```bash
-cd lib/db
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/griper pnpm exec tsx src/seed.ts
+pnpm --filter @workspace/api-server run seed-demo
 ```
 
-**The sample seed clears catalog tables. Run it only against a disposable, empty development database.**
+The command reads the API `.env`, updates only records carrying the demo slugs/codes and can be run again without creating duplicates. It preserves customer accounts, carts, orders and owner-created catalog records.
 
 Start the API and admin in separate terminals from the repository root:
 
