@@ -1,15 +1,18 @@
-import { Router } from 'express';
-import { db } from '@workspace/db';
-import { addresses } from '@workspace/db/schema';
-import { eq, and } from 'drizzle-orm';
-import { requireAuth, AuthRequest } from '../middlewares/auth';
+import { Router } from "express";
+import { db } from "@workspace/db";
+import { addresses } from "@workspace/db/schema";
+import { eq, and } from "drizzle-orm";
+import { requireAuth, AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 
 // GET /api/addresses — Get all user addresses
-router.get('/', requireAuth, async (req: AuthRequest, res) => {
+router.get("/", requireAuth, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
 
     const list = await db
       .select()
@@ -18,24 +21,40 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
 
     res.json(list);
   } catch (error) {
-    console.error('Get addresses error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Get addresses error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // POST /api/addresses — Create new address
-router.post('/', requireAuth, async (req: AuthRequest, res) => {
+router.post("/", requireAuth, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
-    const { label, line1, line2, city, state, pincode, isDefault = false } = req.body;
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const {
+      label,
+      line1,
+      line2,
+      city,
+      state,
+      pincode,
+      isDefault = false,
+    } = req.body;
 
     if (!line1 || !city || !state || !pincode) {
-      res.status(400).json({ error: 'line1, city, state, and pincode are required' });
+      res
+        .status(400)
+        .json({ error: "line1, city, state, and pincode are required" });
       return;
     }
 
     // If this is the first address, force it to be default
-    const existing = await db.select().from(addresses).where(eq(addresses.userId, req.user.id));
+    const existing = await db
+      .select()
+      .from(addresses)
+      .where(eq(addresses.userId, req.user.id));
     const shouldBeDefault = existing.length === 0 || isDefault;
 
     // Reset default if this is default
@@ -62,16 +81,19 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
 
     res.status(201).json(inserted[0]);
   } catch (error) {
-    console.error('Create address error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Create address error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // PATCH /api/addresses/:id — Update address
-router.patch('/:id', requireAuth, async (req: AuthRequest, res) => {
+router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
-    const { id } = req.params;
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const id = String(req.params.id);
     const { label, line1, line2, city, state, pincode, isDefault } = req.body;
 
     // Verify ownership
@@ -82,7 +104,7 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res) => {
       .limit(1);
 
     if (!addr.length) {
-      res.status(404).json({ error: 'Address not found' });
+      res.status(404).json({ error: "Address not found" });
       return;
     }
 
@@ -109,16 +131,19 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res) => {
 
     res.json(updated[0]);
   } catch (error) {
-    console.error('Update address error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Update address error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // DELETE /api/addresses/:id — Delete address
-router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
+router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
-    const { id } = req.params;
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const id = String(req.params.id);
 
     // Verify ownership
     const addr = await db
@@ -128,7 +153,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
       .limit(1);
 
     if (!addr.length) {
-      res.status(404).json({ error: 'Address not found' });
+      res.status(404).json({ error: "Address not found" });
       return;
     }
 
@@ -141,7 +166,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
         .from(addresses)
         .where(eq(addresses.userId, req.user.id))
         .limit(1);
-      
+
       if (remaining.length > 0) {
         await db
           .update(addresses)
@@ -150,10 +175,10 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
       }
     }
 
-    res.json({ message: 'Address deleted' });
+    res.json({ message: "Address deleted" });
   } catch (error) {
-    console.error('Delete address error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Delete address error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

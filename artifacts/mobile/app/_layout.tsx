@@ -1,25 +1,25 @@
-import React, { useEffect } from 'react';
-import { applyGlobalTypographyFix } from '@/constants/typography';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
+import React, { useEffect } from "react";
+import { applyGlobalTypographyFix } from "@/constants/typography";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   GoogleSans_400Regular,
   GoogleSans_500Medium,
   GoogleSans_600SemiBold,
   GoogleSans_700Bold,
-} from '@expo-google-fonts/google-sans';
-import { Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
-import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { ThemeProvider } from '@/context/ThemeContext';
-import { AuthProvider } from '@/context/AuthContext';
-import { CartProvider } from '@/context/CartContext';
-import { WishlistProvider } from '@/context/WishlistContext';
-import { LanguageProvider } from '@/context/LanguageContext';
-import { useColors } from '@/hooks/useColors';
+} from "@expo-google-fonts/google-sans";
+import { Inter_700Bold, useFonts } from "@expo-google-fonts/inter";
+import { Ionicons } from "@expo/vector-icons";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { ThemeProvider } from "@/context/ThemeContext";
+import { AuthProvider } from "@/context/AuthContext";
+import { CartProvider } from "@/context/CartContext";
+import { WishlistProvider } from "@/context/WishlistContext";
+import { LanguageProvider } from "@/context/LanguageContext";
+import { useColors } from "@/hooks/useColors";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -36,22 +36,38 @@ function RootLayoutNav() {
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.primary,
         // @ts-ignore - includeFontPadding is Android-specific but required for custom fonts
-        headerTitleStyle: { fontFamily: 'GoogleSans_600SemiBold', fontSize: 17, color: colors.foreground, includeFontPadding: false },
+        headerTitleStyle: {
+          fontFamily: "GoogleSans_600SemiBold",
+          fontSize: 17,
+          color: colors.foreground,
+        },
         headerShadowVisible: false,
-        headerBackTitle: '',
+        headerBackTitle: "",
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="products" options={{ headerShown: false }} />
+      <Stack.Screen name="offers" options={{ title: "Offers and Coupons" }} />
+      <Stack.Screen name="notifications" options={{ title: "Notifications" }} />
+      <Stack.Screen name="help" options={{ title: "Customer Care" }} />
+      <Stack.Screen name="account/index" options={{ title: "Edit Profile" }} />
       <Stack.Screen name="product/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="category/[slug]" options={{ title: '' }} />
-      <Stack.Screen name="checkout/index" options={{ title: 'Checkout', headerBackTitle: 'Cart' }} />
+      <Stack.Screen name="category/[slug]" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="checkout/index"
+        options={{ title: "Checkout", headerBackTitle: "Cart" }}
+      />
       <Stack.Screen name="checkout/success" options={{ headerShown: false }} />
-      <Stack.Screen name="order/[id]" options={{ title: 'Order Details' }} />
-      <Stack.Screen name="wishlist/index" options={{ title: 'My Wishlist' }} />
+      <Stack.Screen name="order/[id]" options={{ title: "Order Details" }} />
+      <Stack.Screen name="wishlist/index" options={{ title: "My Wishlist" }} />
       <Stack.Screen name="auth/login" options={{ headerShown: false }} />
       <Stack.Screen name="auth/register" options={{ headerShown: false }} />
-      <Stack.Screen name="seller/index" options={{ title: 'Seller Hub' }} />
-      <Stack.Screen name="settings/index" options={{ title: 'Settings' }} />
+      <Stack.Screen name="seller/index" options={{ title: "Seller Hub" }} />
+      <Stack.Screen
+        name="addresses/index"
+        options={{ title: "Delivery addresses" }}
+      />
+      <Stack.Screen name="settings/index" options={{ title: "Settings" }} />
     </Stack>
   );
 }
@@ -85,7 +101,7 @@ export default function RootLayout() {
                 <CartProvider>
                   <WishlistProvider>
                     <GestureHandlerRootView style={{ flex: 1 }}>
-                        <RootLayoutNav />
+                      <RootLayoutNav />
                     </GestureHandlerRootView>
                   </WishlistProvider>
                 </CartProvider>

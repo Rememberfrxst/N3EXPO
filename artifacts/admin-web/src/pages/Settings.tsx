@@ -1,175 +1,244 @@
-import React, { useEffect, useState } from 'react';
-import { adminApi } from '../lib/api';
-import { ShieldCheck, Send, Bell, KeyRound } from 'lucide-react';
-
+import React, { useEffect, useState } from "react";
+import { Save, ShieldCheck, ArrowUpRight } from "lucide-react";
+import { apiRequest, adminApi } from "../lib/api";
 export function Settings() {
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // 2FA State
-  const [totpSecret, setTotpSecret] = useState('');
-  const [otpUrl, setOtpUrl] = useState('');
-  const [verifyCode, setVerifyCode] = useState('');
-  const [setupSuccess, setSetupSuccess] = useState(false);
-
-  // Broadcast Notification State
-  const [notifTitle, setNotifTitle] = useState('');
-  const [notifBody, setNotifBody] = useState('');
-  const [sendingNotif, setSendingNotif] = useState(false);
-
-  useEffect(() => {
-    adminApi.dashboard.auditLogs()
-      .then(setAuditLogs)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  const handleStart2FA = async () => {
-    try {
-      const res = await adminApi.auth.setup2FA();
-      setTotpSecret(res.secret);
-      setOtpUrl(res.otpAuthUrl);
-    } catch (err: any) {
-      alert('Failed to setup 2FA: ' + err.message);
-    }
+  const [data, setData] = useState<any>(null),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [logs, setLogs] = useState<any[]>([]);
+  const load = () => {
+    Promise.all([apiRequest("/admin/settings"), adminApi.dashboard.auditLogs()])
+      .then(([d, l]) => {
+        setData(d);
+        setLogs(l);
+      })
+      .catch((e) => setError(e.message));
   };
-
-  const handleVerify2FA = async (e: React.FormEvent) => {
+  useEffect(load, []);
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    setBusy(true);
+    setNotice("");
+    setError("");
     try {
-      await adminApi.auth.verify2FA(verifyCode);
-      setSetupSuccess(true);
-      alert('2FA successfully enabled for your Admin account!');
-    } catch (err: any) {
-      alert('2FA Verification failed: ' + err.message);
-    }
-  };
-
-  const handleSendNotification = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSendingNotif(true);
-    try {
-      await adminApi.notifications.broadcast(notifTitle, notifBody);
-      alert('Push Notification broadcast sent via Pusher!');
-      setNotifTitle('');
-      setNotifBody('');
-    } catch (err: any) {
-      alert('Failed to send push notification: ' + err.message);
+      setData(
+        await apiRequest("/admin/settings", { method: "PUT", body: data }),
+      );
+      setNotice("Your storefront settings have been saved.");
+      load();
+    } catch (e: any) {
+      setError(e.message);
     } finally {
-      setSendingNotif(false);
+      setBusy(false);
     }
   };
-
   return (
     <div>
       <div className="header">
         <div>
-          <h1 className="page-title">Settings & Security Audit</h1>
-          <p className="page-subtitle">Configure 2FA Authenticator, Admin Audit Logs & Global Push Notifications</p>
+          <p className="eyebrow">MAKE IT YOURS</p>
+          <h1 className="page-title">Store settings</h1>
+          <p className="page-subtitle">
+            The small details that bring your storefront together.
+          </p>
         </div>
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
-        {/* 2FA Security Setup Box */}
-        <div className="card-table" style={{ padding: 24 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <ShieldCheck size={20} color="var(--primary)" /> TOTP 2FA Authenticator Setup
-          </h3>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-            Protect your admin account with Google Authenticator or Authy TOTP 2FA.
-          </p>
-
-          {!totpSecret ? (
-            <button className="btn btn-primary" onClick={handleStart2FA}>
-              <KeyRound size={16} /> Setup 2FA Authenticator
-            </button>
-          ) : (
+      {error && (
+        <div className="error" role="alert">
+          {error}
+          <button className="text-button" onClick={load}>
+            Retry
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div className="notice" role="status">
+          {notice}
+        </div>
+      )}
+      <div className="settings-layout">
+        <div className="panel">
+          <div className="panel-heading">
             <div>
-              <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-main)', border: '1px solid var(--border)', fontSize: 13, marginBottom: 16 }}>
-                <div style={{ fontWeight: 600 }}>Secret Key:</div>
-                <code style={{ fontSize: 16, color: 'var(--primary)', letterSpacing: 2 }}>{totpSecret}</code>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-                  URI: <code>{otpUrl}</code>
+              <h2>Your storefront</h2>
+              <p>These settings are shared with the mobile app.</p>
+            </div>
+          </div>
+          {data ? (
+            <form className="panel-body" onSubmit={save}>
+              {[
+                { key: "storeName", label: "Store name" },
+                { key: "announcement", label: "Home page announcement" },
+                {
+                  key: "supportEmail",
+                  label: "Customer support email",
+                  type: "email",
+                },
+                {
+                  key: "deliveryFee",
+                  label: "Standard delivery fee (₹)",
+                  type: "number",
+                },
+                {
+                  key: "freeShippingThreshold",
+                  label: "Free delivery from (₹)",
+                  type: "number",
+                },
+                { key: "downloadUrl", label: "App download link", type: "url" },
+              ].map((f) => (
+                <div className="form-group" key={f.key}>
+                  <label htmlFor={f.key} className="form-label">
+                    {f.label}
+                  </label>
+                  <input
+                    id={f.key}
+                    className="form-input"
+                    type={f.type || "text"}
+                    min={f.type === "number" ? 0 : undefined}
+                    required={f.key !== "downloadUrl"}
+                    value={data[f.key]}
+                    onChange={(e) =>
+                      setData({
+                        ...data,
+                        [f.key]:
+                          f.type === "number"
+                            ? Number(e.target.value)
+                            : e.target.value,
+                      })
+                    }
+                  />
+                  {f.key === "downloadUrl" && (
+                    <small className="field-hint">
+                      Use the URL of a published APK or app store listing. Leave
+                      blank until a build is available.
+                    </small>
+                  )}
                 </div>
-              </div>
-
-              {!setupSuccess && (
-                <form onSubmit={handleVerify2FA}>
-                  <div className="form-group">
-                    <label className="form-label">Enter 6-digit Code to Activate</label>
-                    <input
-                      className="form-input"
+              ))}
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: 22,
+                  marginTop: 8,
+                }}
+              >
+                <h3 style={{ fontSize: 15, marginBottom: 18 }}>
+                  Customer care & policies
+                </h3>
+                {[
+                  { key: "returnsHeadline", label: "Returns headline" },
+                  { key: "returnsPolicy", label: "Return and exchange policy" },
+                  {
+                    key: "shippingPolicy",
+                    label: "Delivery and shipping policy",
+                  },
+                  { key: "privacyPolicy", label: "Privacy information" },
+                  { key: "termsOfService", label: "Terms and conditions" },
+                  { key: "aboutStore", label: "About your store" },
+                ].map((field) => (
+                  <div className="form-group" key={field.key}>
+                    <label htmlFor={field.key} className="form-label">
+                      {field.label}
+                    </label>
+                    <textarea
+                      id={field.key}
+                      className="form-textarea"
+                      rows={field.key === "returnsHeadline" ? 1 : 4}
+                      value={data[field.key] || ""}
                       required
-                      maxLength={6}
-                      value={verifyCode}
-                      onChange={e => setVerifyCode(e.target.value)}
-                      placeholder="123456"
+                      onChange={(e) =>
+                        setData({ ...data, [field.key]: e.target.value })
+                      }
                     />
                   </div>
-                  <button type="submit" className="btn btn-primary">Activate 2FA</button>
-                </form>
-              )}
-            </div>
+                ))}
+              </div>
+              <button disabled={busy} className="btn btn-primary">
+                <Save size={15} />
+                {busy ? "Saving…" : "Save settings"}
+              </button>
+            </form>
+          ) : (
+            <div className="empty-state">Loading settings…</div>
           )}
         </div>
-
-        {/* Global Push Notifications Composer */}
-        <div className="card-table" style={{ padding: 24 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Bell size={20} color="var(--warning)" /> Send Push Notification
-          </h3>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-            Broadcast real-time push notification alerts directly to all mobile app users.
-          </p>
-
-          <form onSubmit={handleSendNotification}>
-            <div className="form-group">
-              <label className="form-label">Title</label>
-              <input className="form-input" required value={notifTitle} onChange={e => setNotifTitle(e.target.value)} placeholder="e.g. Flash Sale Live! ⚡" />
+        <div>
+          <div className="editorial-card">
+            <ShieldCheck size={26} color="var(--primary)" />
+            <h2 style={{ marginTop: 15 }}>
+              Your store.
+              <br />
+              Your access.
+            </h2>
+            <p>
+              Admin operations are restricted to the configured owner email by
+              the server. Account passwords are stored as bcrypt hashes.
+            </p>
+            <p style={{ marginTop: 15 }}>
+              Change owner credentials with the documented provisioning command
+              on your API server.
+            </p>
+          </div>
+          <div className="panel">
+            <div className="panel-heading">
+              <h2>Builds & documentation</h2>
             </div>
-            <div className="form-group">
-              <label className="form-label">Message Body</label>
-              <textarea className="form-textarea" rows={2} required value={notifBody} onChange={e => setNotifBody(e.target.value)} placeholder="Get up to 50% discount on all mobile phones..." />
+            <div className="panel-body">
+              <p
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: 13,
+                  lineHeight: 1.8,
+                }}
+              >
+                Setup, framework details and Android download instructions live
+                with your source code.
+              </p>
+              <a
+                className="btn btn-secondary"
+                style={{ marginTop: 17 }}
+                href="https://github.com/Rememberfrxst/N3EXPO"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open project <ArrowUpRight size={14} />
+              </a>
             </div>
-            <button type="submit" className="btn btn-primary" disabled={sendingNotif}>
-              <Send size={16} /> {sendingNotif ? 'Sending Broadcast...' : 'Send Broadcast'}
-            </button>
-          </form>
+          </div>
         </div>
       </div>
-
-      {/* Admin Audit Logs Table */}
-      <div className="card-table">
-        <div className="table-header">
-          <h3 style={{ fontSize: 16, fontWeight: 700 }}>Admin Audit Logs ({auditLogs.length})</h3>
+      <div className="panel" style={{ marginTop: 25 }}>
+        <div className="panel-heading">
+          <h2>Store activity</h2>
+          <small>{logs.length} most recent actions</small>
         </div>
-
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center' }}>Loading audit logs...</div>
-        ) : (
+        <div className="table-scroll">
           <table>
             <thead>
               <tr>
                 <th>Action</th>
-                <th>Target Entity</th>
-                <th>Admin Name</th>
-                <th>IP Address</th>
-                <th>Timestamp</th>
+                <th>Record</th>
+                <th>Owner</th>
+                <th>Time</th>
               </tr>
             </thead>
             <tbody>
-              {auditLogs.map(log => (
-                <tr key={log.id}>
-                  <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{log.action}</td>
-                  <td>{log.targetEntity || 'N/A'}</td>
-                  <td>{log.adminName || 'Admin'}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{log.ipAddress || '127.0.0.1'}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{new Date(log.createdAt).toLocaleString()}</td>
+              {logs.map((l) => (
+                <tr key={l.id}>
+                  <td style={{ textTransform: "capitalize" }}>
+                    {l.action.toLowerCase().replaceAll("_", " ")}
+                  </td>
+                  <td>
+                    <small>{l.targetEntity}</small>
+                  </td>
+                  <td>{l.adminName}</td>
+                  <td>{new Date(l.createdAt).toLocaleString("en-IN")}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
+        </div>
       </div>
     </div>
   );

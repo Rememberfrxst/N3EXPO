@@ -8,19 +8,20 @@
  * Usage: import { Text } from '@/components/Text';
  *        — identical API to react-native's Text.
  */
-import React from 'react';
-import { Text as RNText, TextProps, StyleSheet } from 'react-native';
+import React from "react";
+import { Text as RNText, TextProps, StyleSheet } from "react-native";
 
 const base = StyleSheet.create({
   root: {
     includeFontPadding: false,
+    fontFamily: "GoogleSans_400Regular",
   },
 }).root;
 
 export const Text = React.forwardRef<RNText, TextProps>(
   ({ style, ...props }, ref) => (
     <RNText ref={ref} style={[base, style]} {...props} />
-  )
+  ),
 );
 
-Text.displayName = 'Text';
+Text.displayName = "Text";

@@ -2,28 +2,34 @@
  * Central API client for the Meta E-Commerce mobile app.
  * Handles base URL, JWT injection, token refresh on 401, and typed requests.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 function stripTrailingSlash(url: string): string {
-  return url.replace(/\/$/, '');
+  return url.replace(/\/$/, "");
 }
 
-const API_PORT = process.env.EXPO_PUBLIC_API_PORT ?? '3000';
+const API_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "3000";
 
 function resolveDevHost(): string | null {
   const candidates = [
     Constants.expoConfig?.hostUri,
     Constants.expoGoConfig?.debuggerHost,
-    (Constants as { manifest2?: { extra?: { expoGo?: { debuggerHost?: string } } } }).manifest2?.extra?.expoGo?.debuggerHost,
-    (Constants as { manifest?: { debuggerHost?: string } }).manifest?.debuggerHost,
-    (Constants as { expoGoConfig?: { hostUri?: string } }).expoGoConfig?.hostUri,
+    (
+      Constants as {
+        manifest2?: { extra?: { expoGo?: { debuggerHost?: string } } };
+      }
+    ).manifest2?.extra?.expoGo?.debuggerHost,
+    (Constants as { manifest?: { debuggerHost?: string } }).manifest
+      ?.debuggerHost,
+    (Constants as { expoGoConfig?: { hostUri?: string } }).expoGoConfig
+      ?.hostUri,
   ];
 
   for (const candidate of candidates) {
-    const host = candidate?.split(':')[0];
-    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+    const host = candidate?.split(":")[0];
+    if (host && host !== "localhost" && host !== "127.0.0.1") {
       return host;
     }
   }
@@ -42,7 +48,7 @@ export function getApiBaseUrl(): string {
   }
 
   // Android emulator: 10.0.2.2 maps to the host machine's localhost.
-  if (Platform.OS === 'android') {
+  if (Platform.OS === "android") {
     return `http://10.0.2.2:${API_PORT}/api`;
   }
 
@@ -50,26 +56,31 @@ export function getApiBaseUrl(): string {
 }
 
 /** Quick connectivity check — useful for surfacing API errors in the UI. */
-export async function checkApiConnection(): Promise<{ ok: boolean; url: string; error?: string }> {
+export async function checkApiConnection(): Promise<{
+  ok: boolean;
+  url: string;
+  error?: string;
+}> {
   const url = getApiBaseUrl();
   try {
-    const res = await fetch(`${url}/healthz`, { method: 'GET' });
+    const res = await fetch(`${url}/healthz`, { method: "GET" });
     if (!res.ok) {
       return { ok: false, url, error: `Server responded with ${res.status}` };
     }
     return { ok: true, url };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Network request failed';
+    const message =
+      err instanceof Error ? err.message : "Network request failed";
     return { ok: false, url, error: message };
   }
 }
 
 if (__DEV__) {
-  console.log('[API] Using base URL:', getApiBaseUrl());
+  console.log("[API] Using base URL:", getApiBaseUrl());
 }
 
-const TOKEN_KEY = '@griper_access_token';
-const REFRESH_KEY = '@griper_refresh_token';
+const TOKEN_KEY = "@griper_access_token";
+const REFRESH_KEY = "@griper_refresh_token";
 
 export async function getAccessToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);
@@ -94,8 +105,8 @@ async function refreshAccessToken(): Promise<string | null> {
     const refreshToken = await AsyncStorage.getItem(REFRESH_KEY);
     if (!refreshToken) return null;
     const res = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
     });
     if (!res.ok) return null;
@@ -114,24 +125,24 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   auth?: boolean;
 }
 
 export async function apiRequest<T = unknown>(
   path: string,
-  options: RequestOptions = {}
+  options: RequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, auth = true } = options;
+  const { method = "GET", body, auth = true } = options;
 
   const buildHeaders = async (): Promise<Record<string, string>> => {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
     if (auth) {
       const token = await getAccessToken();
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
     }
     return headers;
   };
@@ -150,7 +161,7 @@ export async function apiRequest<T = unknown>(
   if (res.status === 401 && auth) {
     const newToken = await refreshAccessToken();
     if (newToken) {
-      headers['Authorization'] = `Bearer ${newToken}`;
+      headers["Authorization"] = `Bearer ${newToken}`;
       res = await doFetch(headers);
     }
   }
@@ -177,20 +188,22 @@ export const api = {
   auth: {
     login: (email: string, password: string) =>
       apiRequest<{ user: ApiUser; accessToken: string; refreshToken: string }>(
-        '/auth/login',
-        { method: 'POST', body: { email, password }, auth: false }
+        "/auth/login",
+        { method: "POST", body: { email, password }, auth: false },
       ),
     register: (name: string, email: string, phone: string, password: string) =>
       apiRequest<{ user: ApiUser; accessToken: string; refreshToken: string }>(
-        '/auth/register',
-        { method: 'POST', body: { name, email, phone, password }, auth: false }
+        "/auth/register",
+        { method: "POST", body: { name, email, phone, password }, auth: false },
       ),
-    me: () => apiRequest<ApiUser>('/auth/me'),
-    logout: () => apiRequest('/auth/logout', { method: 'POST' }),
+    me: () => apiRequest<ApiUser>("/auth/me"),
+    updateProfile: (body: { name: string; phone?: string }) =>
+      apiRequest<ApiUser>("/auth/profile", { method: "PATCH", body }),
+    logout: () => apiRequest("/auth/logout", { method: "POST" }),
     refresh: (refreshToken: string) =>
       apiRequest<{ accessToken: string; refreshToken?: string }>(
-        '/auth/refresh',
-        { method: 'POST', body: { refreshToken }, auth: false }
+        "/auth/refresh",
+        { method: "POST", body: { refreshToken }, auth: false },
       ),
   },
 
@@ -198,87 +211,106 @@ export const api = {
   products: {
     list: (params?: Record<string, string | number | boolean>) => {
       const qs = params
-        ? '?' + new URLSearchParams(
-            Object.entries(params).map(([k, v]) => [k, String(v)])
+        ? "?" +
+          new URLSearchParams(
+            Object.entries(params).map(([k, v]) => [k, String(v)]),
           ).toString()
-        : '';
-      return apiRequest<{ data: ApiProduct[]; total: number; page: number; limit: number }>(
-        `/products${qs}`,
-        { auth: false }
-      );
+        : "";
+      return apiRequest<{
+        data: ApiProduct[];
+        total: number;
+        page: number;
+        limit: number;
+      }>(`/products${qs}`, { auth: false });
     },
     get: (id: string) =>
-      apiRequest<ApiProduct & { images: ApiProductImage[]; variants: ApiProductVariant[] }>(
-        `/products/${id}`,
-        { auth: false }
-      ),
-    reviews: (id: string) => apiRequest<ApiReview[]>(`/products/${id}/reviews`, { auth: false }),
-    addReview: (id: string, body: { rating: number; title?: string; comment?: string }) =>
-      apiRequest(`/products/${id}/reviews`, { method: 'POST', body }),
+      apiRequest<
+        ApiProduct & {
+          images: ApiProductImage[];
+          variants: ApiProductVariant[];
+        }
+      >(`/products/${id}`, { auth: false }),
+    reviews: (id: string) =>
+      apiRequest<ApiReview[]>(`/products/${id}/reviews`, { auth: false }),
+    addReview: (
+      id: string,
+      body: { rating: number; title?: string; comment?: string },
+    ) => apiRequest(`/products/${id}/reviews`, { method: "POST", body }),
   },
 
   // Categories
   categories: {
-    list: () => apiRequest<ApiCategory[]>('/categories', { auth: false }),
+    list: () => apiRequest<ApiCategory[]>("/categories", { auth: false }),
   },
 
   // Banners
   banners: {
-    list: () => apiRequest<ApiBanner[]>('/banners', { auth: false }),
+    list: () => apiRequest<ApiBanner[]>("/banners", { auth: false }),
   },
 
   // Cart
   cart: {
-    get: () => apiRequest<{ items: ApiCartItem[] }>('/cart'),
+    get: () => apiRequest<{ items: ApiCartItem[] }>("/cart"),
     add: (productId: string, quantity: number, variantId?: string) =>
-      apiRequest('/cart', { method: 'POST', body: { productId, quantity, variantId } }),
+      apiRequest("/cart", {
+        method: "POST",
+        body: { productId, quantity, variantId },
+      }),
     update: (itemId: string, quantity: number) =>
-      apiRequest(`/cart/${itemId}`, { method: 'PATCH', body: { quantity } }),
-    remove: (itemId: string) => apiRequest(`/cart/${itemId}`, { method: 'DELETE' }),
-    clear: () => apiRequest('/cart', { method: 'DELETE' }),
+      apiRequest(`/cart/${itemId}`, { method: "PATCH", body: { quantity } }),
+    remove: (itemId: string) =>
+      apiRequest(`/cart/${itemId}`, { method: "DELETE" }),
+    clear: () => apiRequest("/cart", { method: "DELETE" }),
     applyCoupon: (code: string) =>
       apiRequest<{ discount: number; discountType: string; code: string }>(
-        '/cart/apply-coupon',
-        { method: 'POST', body: { code } }
+        "/cart/apply-coupon",
+        { method: "POST", body: { code } },
       ),
   },
 
   // Wishlist
   wishlist: {
-    get: () => apiRequest<ApiWishlistItem[]>('/wishlist'),
+    get: () => apiRequest<ApiWishlistItem[]>("/wishlist"),
     add: (productId: string) =>
-      apiRequest('/wishlist', { method: 'POST', body: { productId } }),
-    remove: (productId: string) => apiRequest(`/wishlist/${productId}`, { method: 'DELETE' }),
+      apiRequest("/wishlist", { method: "POST", body: { productId } }),
+    remove: (productId: string) =>
+      apiRequest(`/wishlist/${productId}`, { method: "DELETE" }),
   },
 
   // Addresses
   addresses: {
-    list: () => apiRequest<ApiAddress[]>('/addresses'),
-    add: (body: Omit<ApiAddress, 'id' | 'userId' | 'createdAt'>) =>
-      apiRequest<ApiAddress>('/addresses', { method: 'POST', body }),
+    list: () => apiRequest<ApiAddress[]>("/addresses"),
+    add: (body: Omit<ApiAddress, "id" | "userId" | "createdAt">) =>
+      apiRequest<ApiAddress>("/addresses", { method: "POST", body }),
     update: (id: string, body: Partial<ApiAddress>) =>
-      apiRequest<ApiAddress>(`/addresses/${id}`, { method: 'PUT', body }),
-    delete: (id: string) => apiRequest(`/addresses/${id}`, { method: 'DELETE' }),
-    setDefault: (id: string) => apiRequest(`/addresses/${id}/default`, { method: 'PATCH' }),
+      apiRequest<ApiAddress>(`/addresses/${id}`, { method: "PUT", body }),
+    delete: (id: string) =>
+      apiRequest(`/addresses/${id}`, { method: "DELETE" }),
+    setDefault: (id: string) =>
+      apiRequest(`/addresses/${id}/default`, { method: "PATCH" }),
   },
 
   // Orders
   orders: {
-    list: () => apiRequest<ApiOrder[]>('/orders'),
-    get: (id: string) => apiRequest<ApiOrder & { items: ApiOrderItem[] }>(`/orders/${id}`),
+    list: () => apiRequest<ApiOrder[]>("/orders"),
+    get: (id: string) =>
+      apiRequest<ApiOrder & { items: ApiOrderItem[] }>(`/orders/${id}`),
     place: (addressId: string, paymentMethod: string, couponCode?: string) =>
-      apiRequest<ApiOrder>('/orders', {
-        method: 'POST',
+      apiRequest<ApiOrder>("/orders", {
+        method: "POST",
         body: { addressId, paymentMethod, couponCode },
       }),
-    cancel: (id: string) => apiRequest(`/orders/${id}/cancel`, { method: 'POST' }),
+    cancel: (id: string) =>
+      apiRequest(`/orders/${id}/cancel`, { method: "POST" }),
   },
 
   // Notifications
   notifications: {
-    list: () => apiRequest<ApiNotification[]>('/notifications'),
-    markRead: (id: string) => apiRequest(`/notifications/${id}/read`, { method: 'PATCH' }),
-    markAllRead: () => apiRequest('/notifications/read-all', { method: 'PATCH' }),
+    list: () => apiRequest<ApiNotification[]>("/notifications"),
+    markRead: (id: string) =>
+      apiRequest(`/notifications/${id}/read`, { method: "PATCH" }),
+    markAllRead: () =>
+      apiRequest("/notifications/read-all", { method: "PATCH" }),
   },
 
   // Image Uploads (Presigned S3)
@@ -289,44 +321,53 @@ export const api = {
      */
     presign: (
       files: { fileName: string; contentType: string; size: number }[],
-      folder: 'products' | 'avatars' | 'banners' = 'products'
+      folder: "products" | "avatars" | "banners" = "products",
     ) =>
       apiRequest<{
         uploads: { presignedUrl: string; key: string; publicUrl: string }[];
-      }>('/uploads/presign', { method: 'POST', body: { files, folder } }),
+      }>("/uploads/presign", { method: "POST", body: { files, folder } }),
 
     /** Upload file bytes directly to S3 using a presigned URL (no auth header needed). */
-    putToS3: async (presignedUrl: string, file: Blob, contentType: string): Promise<void> => {
+    putToS3: async (
+      presignedUrl: string,
+      file: Blob,
+      contentType: string,
+    ): Promise<void> => {
       const res = await fetch(presignedUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': contentType },
+        method: "PUT",
+        headers: { "Content-Type": contentType },
         body: file,
       });
       if (!res.ok) throw new Error(`S3 upload failed: ${res.status}`);
     },
 
     /** After S3 PUT succeeds, register the image in the DB. */
-    confirmProductImage: (productId: string, key: string, altText?: string, isPrimary?: boolean) =>
-      apiRequest('/uploads/confirm-product-image', {
-        method: 'POST',
+    confirmProductImage: (
+      productId: string,
+      key: string,
+      altText?: string,
+      isPrimary?: boolean,
+    ) =>
+      apiRequest("/uploads/confirm-product-image", {
+        method: "POST",
         body: { productId, key, altText, isPrimary },
       }),
 
     /** Delete an image from both S3 and DB. */
     deleteProductImage: (imageId: string) =>
-      apiRequest(`/uploads/product-image/${imageId}`, { method: 'DELETE' }),
+      apiRequest(`/uploads/product-image/${imageId}`, { method: "DELETE" }),
 
     /** Get a presigned URL to upload an avatar for the current user. */
     avatarPresign: (fileName: string, contentType: string, size: number) =>
       apiRequest<{ presignedUrl: string; key: string; publicUrl: string }>(
-        '/uploads/avatar-presign',
-        { method: 'POST', body: { fileName, contentType, size } }
+        "/uploads/avatar-presign",
+        { method: "POST", body: { fileName, contentType, size } },
       ),
 
     /** After avatar S3 PUT succeeds, persist the new avatarUrl. */
     confirmAvatar: (key: string) =>
-      apiRequest<{ avatarUrl: string }>('/uploads/confirm-avatar', {
-        method: 'POST',
+      apiRequest<{ avatarUrl: string }>("/uploads/confirm-avatar", {
+        method: "POST",
         body: { key },
       }),
   },
@@ -334,18 +375,20 @@ export const api = {
   // Recommendations
   recommendations: {
     track: (action: string, productId?: string, searchQuery?: string) =>
-      apiRequest('/recommendations/track', {
-        method: 'POST',
+      apiRequest("/recommendations/track", {
+        method: "POST",
         body: { action, productId, searchQuery },
       }),
     forYou: () =>
-      apiRequest<{ data: ApiProduct[] }>('/recommendations/for-you'),
+      apiRequest<{ data: ApiProduct[] }>("/recommendations/for-you"),
     similar: (productId: string) =>
-      apiRequest<{ data: ApiProduct[] }>(`/recommendations/similar/${productId}`),
+      apiRequest<{ data: ApiProduct[] }>(
+        `/recommendations/similar/${productId}`,
+      ),
     trending: () =>
-      apiRequest<{ data: ApiProduct[] }>('/recommendations/trending'),
+      apiRequest<{ data: ApiProduct[] }>("/recommendations/trending"),
     recentlyViewed: () =>
-      apiRequest<{ data: ApiProduct[] }>('/recommendations/recently-viewed'),
+      apiRequest<{ data: ApiProduct[] }>("/recommendations/recently-viewed"),
   },
 
   // Payments (Razorpay)
@@ -357,7 +400,7 @@ export const api = {
         currency: string;
         orderId: string;
         key_id: string;
-      }>('/payments/create-order', { method: 'POST', body: { orderId } }),
+      }>("/payments/create-order", { method: "POST", body: { orderId } }),
 
     verify: (params: {
       razorpay_order_id: string;
@@ -366,12 +409,12 @@ export const api = {
       orderId: string;
     }) =>
       apiRequest<{ success: boolean; orderId: string; paymentId: string }>(
-        '/payments/verify',
-        { method: 'POST', body: params }
+        "/payments/verify",
+        { method: "POST", body: params },
       ),
 
     refund: (orderId: string) =>
-      apiRequest('/payments/refund', { method: 'POST', body: { orderId } }),
+      apiRequest("/payments/refund", { method: "POST", body: { orderId } }),
   },
 };
 
@@ -382,7 +425,7 @@ export interface ApiUser {
   name: string;
   email: string;
   phone?: string;
-  role: 'customer' | 'seller' | 'admin';
+  role: "customer" | "seller" | "admin";
   isVerified: boolean;
   avatarUrl?: string;
 }
@@ -408,6 +451,7 @@ export interface ApiProduct {
   tags?: string[];
   images?: ApiProductImage[];
   variants?: ApiProductVariant[];
+  variantCount?: number;
   category?: ApiCategory;
 }
 
@@ -482,7 +526,13 @@ export interface ApiOrder {
   id: string;
   userId: string;
   orderNumber: string;
-  status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
+  status:
+    | "pending"
+    | "confirmed"
+    | "shipped"
+    | "delivered"
+    | "cancelled"
+    | "returned";
   subtotal: string;
   discount: string;
   shippingFee: string;
@@ -531,16 +581,17 @@ export interface ApiNotification {
 
 // ─── Mappers: API → App types ────────────────────────────────────────────────
 
-import { Product, Category } from '@/constants/data';
+import { Product, Category } from "@/constants/data";
 
 export function mapApiProduct(p: ApiProduct & { imageUrl?: string }): Product {
   const price = parseFloat(p.price) || 0;
-  const originalPrice = parseFloat(p.compareAtPrice ?? '0') || price;
-  const discount = originalPrice > price
-    ? Math.round(((originalPrice - price) / originalPrice) * 100)
-    : 0;
-  const primaryImage = p.images?.find(i => i.isPrimary) ?? p.images?.[0];
-  const imageUrl = p.imageUrl || primaryImage?.url || 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500&q=80';
+  const originalPrice = parseFloat(p.compareAtPrice ?? "0") || price;
+  const discount =
+    originalPrice > price
+      ? Math.round(((originalPrice - price) / originalPrice) * 100)
+      : 0;
+  const primaryImage = p.images?.find((i) => i.isPrimary) ?? p.images?.[0];
+  const imageUrl = p.imageUrl || primaryImage?.url || "";
 
   return {
     id: p.id,
@@ -548,18 +599,19 @@ export function mapApiProduct(p: ApiProduct & { imageUrl?: string }): Product {
     price,
     originalPrice,
     discount,
-    rating: parseFloat(p.avgRating) || 4.5,
+    rating: parseFloat(p.avgRating) || 0,
     reviewCount: p.totalReviews ?? 0,
-    category: p.category?.slug ?? p.categoryId ?? '',
-    subcategory: '',
-    seller: p.brand ?? 'Meta Store',
-    sellerId: p.sellerId ?? '',
+    category: p.category?.slug ?? p.categoryId ?? "",
+    subcategory: "",
+    seller: p.brand ?? "Griper",
+    sellerId: p.sellerId ?? "",
     stock: p.stock ?? 0,
-    description: p.description ?? '',
+    description: p.description ?? "",
     image: imageUrl,
     tags: p.tags ?? [],
     isExpress: false,
     specifications: p.specifications ?? {},
+    variantCount: p.variants?.length ?? p.variantCount ?? 0,
   };
 }
 
@@ -568,8 +620,8 @@ export function mapApiCategory(c: ApiCategory): Category {
     id: c.id,
     name: c.name,
     slug: c.slug,
-    icon: c.icon ?? '🛍️',
-    color: c.color ?? '#6366f1',
-    color2: c.color ?? '#818cf8',
+    icon: c.icon ?? "🛍️",
+    color: c.color ?? "#6366f1",
+    color2: c.color ?? "#818cf8",
   };
 }

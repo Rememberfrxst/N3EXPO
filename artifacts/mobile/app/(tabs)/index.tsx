@@ -1,350 +1,582 @@
-import React, { useEffect, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import { Text } from '@/components/Text';
-import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import SvgIcon from '@/components/SvgIcon';
-import { SvgXml } from 'react-native-svg';
-import * as Haptics from 'expo-haptics';
-import * as Location from 'expo-location';
-import { useColors } from '@/hooks/useColors';
-import { Product, BANNERS, CATEGORIES, PRODUCTS } from '@/constants/data';
-import { api, mapApiProduct, mapApiCategory, checkApiConnection, getApiBaseUrl } from '@/services/api';
-import { useWishlist } from '@/context/WishlistContext';
-import BannerCarousel from '@/components/BannerCarousel';
-import CategoryCard from '@/components/CategoryCard';
-import ProductCard from '@/components/ProductCard';
-
-const GRIPER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 18.950000762939453 88.75 35" data-asc="1.079" width="88.75" height="35"><defs/><g fill="#ffffff"><g transform="translate(0, 0)"><path d="M16.80 53.95L15.75 48.40L7.85 48.40L6.80 53.95L0 53.95L6.75 18.95L17.10 18.95L23.50 53.95L16.80 53.95M11.70 25.45L9.75 37.10L8.65 43.05L14.90 43.05L13.75 37.10L11.80 25.45L11.70 25.45ZM31.90 18.95L35.45 33.20L35.65 33.20L39.20 18.95L46.10 18.95L41.30 35.65L46.45 53.95L39.35 53.95L35.65 38.95L35.45 38.95L31.75 53.95L24.65 53.95L29.80 35.65L25 18.95L31.90 18.95ZM49.50 53.95L49.50 18.95L67.45 18.95L67.45 24.95L56.35 24.95L56.35 33.30L66.25 33.30L66.25 39.10L56.35 39.10L56.35 48.15L67.65 48.15L67.65 53.95L49.50 53.95ZM71.50 53.95L71.50 18.95L78.35 18.95L78.35 48.15L88.75 48.15L88.75 53.95L71.50 53.95Z"/></g></g></svg>`;
-
-function renderGrid(products: Product[], toggle: (p: Product) => void, isInWishlist: (id: string) => boolean) {
-  const pairs: Product[][] = [];
-  for (let i = 0; i < products.length; i += 2) {
-    pairs.push(products.slice(i, i + 2));
-  }
-  return pairs.map((pair, idx) => (
-    <View key={idx} style={styles.row}>
-      {pair.map(p => (
-        <ProductCard
-          key={p.id}
-          product={p}
-          onPress={() => router.push(`/product/${p.id}`)}
-          isWishlisted={isInWishlist(p.id)}
-          onWishlistToggle={() => { toggle(p); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-          style={{ flex: 1 }}
-        />
-      ))}
-      {pair.length === 1 && <View style={{ flex: 1 }} />}
-    </View>
-  ));
-}
-
-export default function HomeScreen() {
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const { toggle, isInWishlist } = useWishlist();
-  const isWeb = Platform.OS === 'web';
-  const topPad = isWeb ? 67 : insets.top;
-
-  const [locationStr, setLocationStr] = useState('Detecting location...');
-  const [locationIcon, setLocationIcon] = useState<'location' | 'location-outline'>('location-outline');
-
-  const [banners, setBanners] = useState<any[]>(BANNERS);
-  const [categories, setCategories] = useState<any[]>(CATEGORIES);
-  const [products, setProducts] = useState<Product[]>(PRODUCTS);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [apiUrl, setApiUrl] = useState(getApiBaseUrl());
-
-  const deals = products.slice(0, 8);
-  const trendingFiltered = products.filter(p => p.category === 'mobiles' || p.category === 'electronics' || p.category === 'smartphones' || p.category === 'laptops');
-  const trending = (trendingFiltered.length > 0 ? trendingFiltered : products).slice(0, 8);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          if (!cancelled) setLocationStr('India');
-          return;
-        }
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        const results = await Location.reverseGeocodeAsync({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
-        if (!cancelled && results.length > 0) {
-          const r = results[0];
-          const pincode = r.postalCode ?? '';
-          const city = r.city ?? r.district ?? r.subregion ?? '';
-          const country = r.country === 'India' ? 'India' : (r.isoCountryCode ?? r.country ?? '');
-          if (pincode && city) {
-            setLocationStr(`${pincode} ${city}/${country}`);
-          } else if (pincode) {
-            setLocationStr(`${pincode} ${country}`);
-          } else if (city) {
-            setLocationStr(`${city}, ${country}`);
-          } else {
-            setLocationStr(country || 'India');
-          }
-          setLocationIcon('location');
-        }
-      } catch {
-        if (!cancelled) setLocationStr('India');
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const loadCatalog = React.useCallback(async () => {
+import React, { useCallback, useRef, useState } from "react";
+import {
+  View,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  RefreshControl,
+  useWindowDimensions,
+} from "react-native";
+import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router, useFocusEffect } from "expo-router";
+import { Text } from "@/components/Text";
+import { Icon } from "@/components/StoreIcon";
+import { ProductGrid, LoadState } from "@/components/ShopUI";
+import { StoreHeader, DepartmentTabs } from "@/components/StoreHeader";
+import CampaignCarousel from "@/components/CampaignCarousel";
+import CategoryThumbnail from "@/components/CategoryThumbnail";
+import ProductFiltersBar, { ProductFilters } from "@/components/ProductFilters";
+import { useColors } from "@/hooks/useColors";
+import { useStorefront } from "@/hooks/useStorefront";
+import { useOffers } from "@/hooks/useOffers";
+import {
+  api,
+  ApiProduct,
+  ApiCategory,
+  ApiBanner,
+  mapApiProduct,
+} from "@/services/api";
+import { formatPrice } from "@/constants/data";
+export default function Home() {
+  const c = useColors(),
+    insets = useSafeAreaInsets(),
+    { width } = useWindowDimensions(),
+    store = useStorefront(),
+    offers = useOffers();
+  const requestSequence = useRef(0);
+  const [cats, setCats] = useState<ApiCategory[]>([]),
+    [banners, setBanners] = useState<ApiBanner[]>([]),
+    [products, setProducts] = useState<ApiProduct[]>([]),
+    [newest, setNewest] = useState<ApiProduct[]>([]),
+    [best, setBest] = useState<ApiProduct[]>([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(false),
+    [active, setActive] = useState(""),
+    [filters, setFilters] = useState<ProductFilters>({ sort: "popular" }),
+    [page, setPage] = useState(1),
+    [more, setMore] = useState(false),
+    [fetchingMore, setFetchingMore] = useState(false),
+    [query, setQuery] = useState("");
+  const params = {
+    category: active,
+    sort: filters.sort,
+    ...(filters.minPrice !== undefined ? { minPrice: filters.minPrice } : {}),
+    ...(filters.maxPrice !== undefined ? { maxPrice: filters.maxPrice } : {}),
+    ...(filters.inStock ? { inStock: true } : {}),
+  };
+  const load = useCallback(async () => {
+    const sequence = ++requestSequence.current;
     setLoading(true);
-    setLoadError(null);
-    setApiUrl(getApiBaseUrl());
-
-    const connection = await checkApiConnection();
-    if (!connection.ok) {
-      setLoadError(
-        `Cannot reach API at ${connection.url}. ${connection.error ?? ''} ` +
-        'Make sure the API server is running and your phone is on the same Wi-Fi network.'
-      );
-      setBanners([]);
-      setCategories([]);
-      setProducts([]);
-      setLoading(false);
-      return;
-    }
-
+    setError(false);
     try {
-      const [bannersData, catsData, prodsData] = await Promise.all([
-        api.banners.list(),
+      const [p, cat, b, n, top] = await Promise.all([
+        api.products.list({ ...params, limit: 20 }),
         api.categories.list(),
-        api.products.list({ limit: 20 }),
+        api.banners.list(),
+        api.products.list({ category: active, sort: "newest", limit: 4 }),
+        api.products.list({ category: active, sort: "popular", limit: 4 }),
       ]);
-
-      setBanners(
-        bannersData.map((b: any) => ({
-          id: b.id,
-          image: { uri: b.imageUrl },
-          title: b.title ?? '',
-          subtitle: b.subtitle ?? '',
-          color: '#1a1a2e',
-        }))
-      );
-      setCategories(catsData.map(mapApiCategory));
-      setProducts(prodsData.data.map(mapApiProduct));
-    } catch (err: any) {
-      console.warn('[Home] Failed to load catalog from API:', err?.message ?? err);
-      setLoadError(err?.message ?? 'Failed to load catalog from API');
-      setBanners([]);
-      setCategories([]);
-      setProducts([]);
+      if (sequence !== requestSequence.current) return;
+      setProducts(p.data);
+      setCats(cat);
+      setBanners(b);
+      setNewest(n.data);
+      setBest(top.data);
+      setPage(1);
+      setMore(p.data.length === 20);
+    } catch {
+      if (sequence === requestSequence.current) setError(true);
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    loadCatalog();
-  }, [loadCatalog]);
-
-  return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
-      {/* Brand Header */}
-      <View style={[styles.header, { paddingTop: topPad + 8, backgroundColor: colors.primary }]}>
-        <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <View style={styles.logoWrap}>
-              <SvgXml xml={GRIPER_LOGO_SVG} width={76} height={28} />
-            </View>
-            <TouchableOpacity style={styles.locationRow} activeOpacity={0.75} onPress={async () => {
-              const { status } = await Location.requestForegroundPermissionsAsync();
-              if (status !== 'granted') return;
-              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-              const results = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-              if (results.length > 0) {
-                const r = results[0];
-                const pincode = r.postalCode ?? '';
-                const city = r.city ?? r.district ?? '';
-                const country = r.country === 'India' ? 'India' : (r.isoCountryCode ?? '');
-                setLocationStr(pincode && city ? `${pincode} ${city}/${country}` : city ? `${city}, ${country}` : country || 'India');
-                setLocationIcon('location');
-              }
-            }}>
-              <SvgIcon name={locationIcon} size={12} color="rgba(255,255,255,0.9)" />
-              <Text style={styles.location} numberOfLines={1}>{locationStr}</Text>
-              <SvgIcon name="chevron-down" size={10} color="rgba(255,255,255,0.7)" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/wishlist')}>
-              <SvgIcon name="heart-outline" size={20} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <SvgIcon name="notifications-outline" size={22} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={[styles.searchTouch, { backgroundColor: '#fff' }]}
-          onPress={() => router.push('/search')}
-          activeOpacity={0.88}
+  }, [
+    active,
+    filters.sort,
+    filters.minPrice,
+    filters.maxPrice,
+    filters.inStock,
+  ]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+      return () => {
+        requestSequence.current++;
+      };
+    }, [load]),
+  );
+  const loadMore = async () => {
+    const sequence = requestSequence.current;
+    setFetchingMore(true);
+    try {
+      const result = await api.products.list({
+        ...params,
+        page: page + 1,
+        limit: 20,
+      });
+      if (sequence !== requestSequence.current) return;
+      setProducts((p) => [...p, ...result.data]);
+      setPage((p) => p + 1);
+      setMore(result.data.length === 20);
+    } catch {
+      setError(true);
+    } finally {
+      setFetchingMore(false);
+    }
+  };
+  const roots = cats.filter(
+      (cat) =>
+        !cat.parentId || !cats.some((parent) => parent.id === cat.parentId),
+    ),
+    tiles = active ? cats.filter((cat) => cat.parentId === active) : roots,
+    displayTiles = tiles.length ? tiles : roots;
+  const browse = (sort: string, title: string, category = "") =>
+      router.push({ pathname: "/products", params: { sort, title, category } }),
+    featured = [
+      ...new Map(
+        [...newest, ...best, ...products].map((p) => [p.id, p]),
+      ).values(),
+    ].filter((p) => p.isFeatured),
+    heroHeight = width * 0.79 + insets.top;
+  const collection = (
+    title: string,
+    list: ApiProduct[],
+    sort: string,
+    tint: string,
+  ) => (
+    <TouchableOpacity
+      key={title}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${title}`}
+      onPress={() => browse(sort, title, active)}
+      style={[s.collection, { backgroundColor: tint }]}
+    >
+      <View style={s.collectionHead}>
+        <Text
+          style={{
+            fontSize: 15,
+            color: c.foreground,
+            fontFamily: "GoogleSans_700Bold",
+            fontStyle: "italic",
+          }}
         >
-          <SvgIcon name="search" size={18} color={colors.mutedForeground} />
-          <Text style={[styles.searchHint, { color: colors.mutedForeground }]}>Search products, brands & more</Text>
-          <SvgIcon name="mic-outline" size={18} color={colors.primary} />
+          {title}
+        </Text>
+        <Icon name="chevron-forward" size={20} />
+      </View>
+      <View style={{ flexDirection: "row", gap: 3 }}>
+        {list.slice(0, 2).map((p) => (
+          <View key={p.id} style={{ flex: 1 }}>
+            <Image
+              source={{
+                uri:
+                  p.images?.[0]?.url ||
+                  (p as ApiProduct & { imageUrl?: string }).imageUrl,
+              }}
+              style={{
+                width: "100%",
+                aspectRatio: 0.7,
+                backgroundColor: c.secondary,
+              }}
+              contentFit="cover"
+            />
+            <Text
+              style={{
+                color: c.accent,
+                fontFamily: "GoogleSans_700Bold",
+                fontSize: 14,
+                marginTop: 8,
+                marginBottom: 4,
+              }}
+            >
+              {formatPrice(Number(p.price))}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </TouchableOpacity>
+  );
+  return (
+    <ScrollView
+      testID="home-screen"
+      style={{ flex: 1, backgroundColor: c.background }}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: 25 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={loading}
+          onRefresh={load}
+          tintColor={c.foreground}
+        />
+      }
+    >
+      <View
+        style={{
+          height: banners.length ? heroHeight : insets.top + 103,
+          backgroundColor: c.card,
+        }}
+      >
+        {banners.length > 0 && (
+          <CampaignCarousel
+            banners={banners}
+            height={heroHeight}
+            headerSpace={insets.top + 99}
+          />
+        )}
+        <View style={[s.heroHeader, { paddingTop: insets.top }]}>
+          <StoreHeader
+            inverse={banners.length > 0}
+            query={query}
+            onChangeQuery={setQuery}
+            onSearch={(q) =>
+              router.push({ pathname: "/products", params: { q } })
+            }
+          />
+          <DepartmentTabs
+            inverse={banners.length > 0}
+            tabs={[
+              { id: "", name: "All" },
+              ...roots.map((cat) => ({ id: cat.id, name: cat.name })),
+              { id: "__fresh", name: "Fresh Fits" },
+              { id: "__offers", name: "Offers" },
+            ]}
+            active={active}
+            onChange={(id) =>
+              id === "__offers"
+                ? router.push("/offers")
+                : id === "__fresh"
+                  ? router.push("/(tabs)/fresh-fits")
+                  : setActive(id)
+            }
+          />
+        </View>
+      </View>
+      <View
+        style={[
+          s.benefits,
+          { backgroundColor: "#FFF2D9", borderColor: "#F3DEC0" },
+        ]}
+      >
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() =>
+            router.push({ pathname: "/help", params: { section: "shipping" } })
+          }
+          style={s.benefit}
+        >
+          <Icon name="car" size={17} color="#773E17" />
+          <View>
+            <Text style={s.benefitTitle}>Free Shipping</Text>
+            <Text style={s.benefitSub}>
+              Orders from ₹{store.freeShippingThreshold}*
+            </Text>
+          </View>
+        </TouchableOpacity>
+        <View style={{ height: 32, width: 1, backgroundColor: "#C6A47D" }} />
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() =>
+            router.push({ pathname: "/help", params: { section: "returns" } })
+          }
+          style={s.benefit}
+        >
+          <Icon name="return-down-back" size={17} color="#773E17" />
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={1} style={s.benefitTitle}>
+              {store.returnsHeadline}
+            </Text>
+            <Text style={s.benefitSub}>Customer care is here to help</Text>
+          </View>
         </TouchableOpacity>
       </View>
-
-      {/* Offers stripe */}
-      <View style={[styles.stripe, { backgroundColor: colors.accent }]}>
-        <Text style={styles.stripeText}>FREE delivery on orders above ₹499  •  Use code GRIPER10 for 10% off</Text>
-      </View>
-
-      {loading && (
-        <ActivityIndicator style={{ marginTop: 40 }} size="large" color={colors.primary} />
-      )}
-
-      {!loading && loadError && (
-        <View style={[styles.errorBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.errorTitle, { color: colors.foreground }]}>Could not load store data</Text>
-          <Text style={[styles.errorText, { color: colors.mutedForeground }]}>{loadError}</Text>
-          <Text style={[styles.errorHint, { color: colors.mutedForeground }]}>
-            API: {apiUrl}
+      <TouchableOpacity
+        accessibilityRole="button"
+        onPress={() =>
+          offers.length
+            ? router.push("/offers")
+            : browse("popular", "Exclusive Picks")
+        }
+        style={s.exclusive}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={s.exclusiveTitle}>
+            {store.storeName.toUpperCase()} Exclusive Picks
           </Text>
-          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={loadCatalog}>
-            <Text style={styles.retryBtnText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {!loading && !loadError && products.length === 0 && (
-        <View style={[styles.errorBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.errorTitle, { color: colors.foreground }]}>No products yet</Text>
-          <Text style={[styles.errorText, { color: colors.mutedForeground }]}>
-            Add products from the admin dashboard — they will appear here once published as Active.
+          <Text numberOfLines={2} style={s.exclusiveSub}>
+            {store.announcement}
           </Text>
-          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={loadCatalog}>
-            <Text style={styles.retryBtnText}>Refresh</Text>
-          </TouchableOpacity>
         </View>
-      )}
-
-      {/* Banner */}
-      {!loadError && products.length > 0 && <BannerCarousel banners={banners} />}
-
-      {/* Categories */}
-      {!loadError && categories.length > 0 && (
-      <View style={styles.section}>
-        <View style={styles.sectionHead}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Shop by Category</Text>
-          <TouchableOpacity>
-            <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
-          </TouchableOpacity>
+        <View style={s.exclusiveCta}>
+          <Text
+            style={{
+              color: "#C84267",
+              fontSize: 9,
+              fontFamily: "GoogleSans_700Bold",
+              textAlign: "center",
+            }}
+          >
+            {offers.length ? "SHOP\nSTORE OFFERS" : "EXPLORE\nTHE PICKS"}
+          </Text>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catScroll}>
-          {categories.map(cat => (
-            <CategoryCard
-              key={cat.id}
+      </TouchableOpacity>
+      <View style={[s.categoryGrid, { backgroundColor: c.card }]}>
+        {displayTiles.slice(0, 14).map((cat) => (
+          <TouchableOpacity
+            key={cat.id}
+            onPress={() => browse("popular", cat.name, cat.slug)}
+            style={s.categoryTile}
+          >
+            <CategoryThumbnail
               category={cat}
-              onPress={() => router.push(`/category/${cat.slug}`)}
+              size={Math.max(51, (width - 50) / 5)}
+              radius={23}
             />
-          ))}
-        </ScrollView>
-      </View>
-      )}
-
-      {/* Today's Deals */}
-      {!loadError && products.length > 0 && (
-      <View style={styles.section}>
-        <View style={styles.sectionHead}>
-          <View>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Today's Deals</Text>
-            <Text style={[styles.sectionSub, { color: colors.mutedForeground }]}>Limited time offers</Text>
-          </View>
-          <View style={[styles.dealBadge, { backgroundColor: colors.primary }]}>
-            <Text style={styles.dealBadgeText}>LIVE</Text>
-          </View>
-        </View>
-        <View style={styles.gridGap}>
-          {renderGrid(deals, toggle, isInWishlist)}
-        </View>
-      </View>
-      )}
-
-      {/* Trending Electronics */}
-      {!loadError && products.length > 0 && (
-      <View style={styles.section}>
-        <View style={styles.sectionHead}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Trending Electronics</Text>
-          <TouchableOpacity onPress={() => router.push('/category/electronics')}>
-            <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
+            <Text
+              numberOfLines={2}
+              style={{
+                fontSize: 11,
+                color: c.mutedForeground,
+                textAlign: "center",
+                marginTop: 7,
+                minHeight: 28,
+              }}
+            >
+              {cat.name}
+            </Text>
           </TouchableOpacity>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
-          {trending.map(p => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              onPress={() => router.push(`/product/${p.id}`)}
-              isWishlisted={isInWishlist(p.id)}
-              onWishlistToggle={() => { toggle(p); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-              style={{ width: 170 }}
-            />
+        ))}
+        <TouchableOpacity
+          accessibilityLabel="View all offers"
+          onPress={() => router.push("/offers")}
+          style={s.categoryTile}
+        >
+          <View
+            style={[
+              s.offerBubble,
+              {
+                width: Math.max(51, (width - 50) / 5),
+                height: Math.max(51, (width - 50) / 5),
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color: "#fff",
+                fontSize: 11,
+                textAlign: "center",
+                fontFamily: "GoogleSans_700Bold",
+              }}
+            >
+              Store{"\n"}Offers
+            </Text>
+          </View>
+          <Text
+            style={{ fontSize: 11, color: c.mutedForeground, marginTop: 7 }}
+          >
+            Offers
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {roots.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.edits}
+        >
+          {roots.map((cat) => (
+            <TouchableOpacity
+              key={cat.id}
+              accessibilityLabel={`Shop ${cat.name}`}
+              onPress={() => browse("popular", cat.name, cat.slug)}
+              style={{ width: width * 0.225 }}
+            >
+              <CategoryThumbnail
+                category={cat}
+                size={width * 0.225}
+                radius={2}
+              />
+              <View style={s.editCaption}>
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontSize: 11,
+                    textAlign: "center",
+                    fontFamily: "GoogleSans_600SemiBold",
+                  }}
+                  numberOfLines={1}
+                >
+                  {cat.name}
+                </Text>
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontSize: 11,
+                    textAlign: "center",
+                    fontFamily: "GoogleSans_700Bold",
+                    marginTop: 4,
+                  }}
+                >
+                  Shop now
+                </Text>
+              </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
-      </View>
       )}
-
-      {/* For You */}
-      {!loadError && products.length > 8 && (
-      <View style={styles.section}>
-        <View style={styles.sectionHead}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>For You</Text>
-          <Text style={[styles.sectionSub, { color: colors.mutedForeground }]}>Based on your interests</Text>
+      {(newest.length > 0 || best.length > 0) && (
+        <View style={[s.collections, { backgroundColor: c.muted }]}>
+          {collection("New Arrivals", newest, "newest", c.secondary)}
+          {collection(
+            "Best Sellers",
+            best,
+            "popular",
+            c.background === "#FFFFFF" ? "#FFF0F0" : c.secondary,
+          )}
         </View>
-        <View style={styles.gridGap}>
-          {renderGrid(products.slice(8, 16), toggle, isInWishlist)}
-        </View>
-      </View>
       )}
-
-      <View style={{ height: isWeb ? 100 : 120 }} />
+      {featured.length > 0 && (
+        <View style={s.featured}>
+          <Text
+            style={{
+              color: "#fff",
+              fontSize: 16,
+              fontFamily: "GoogleSans_700Bold",
+              marginBottom: 12,
+            }}
+          >
+            Featured offers
+          </Text>
+          <ProductGrid products={featured.slice(0, 2).map(mapApiProduct)} />
+          {offers.length > 0 && (
+            <Text style={{ fontSize: 9, color: "#FADFD5", paddingTop: 4 }}>
+              * Coupon minimum spend and offer terms apply.
+            </Text>
+          )}
+        </View>
+      )}
+      {banners.length > 1 && (
+        <View style={{ paddingVertical: 8, backgroundColor: c.muted }}>
+          <CampaignCarousel banners={banners.slice(1)} height={width * 0.38} />
+        </View>
+      )}
+      <View style={{ paddingTop: 13, backgroundColor: c.card }}>
+        <Text
+          style={{
+            fontSize: 19,
+            color: c.foreground,
+            textAlign: "center",
+            fontFamily: "GoogleSans_600SemiBold",
+            paddingVertical: 12,
+          }}
+        >
+          Recommend
+        </Text>
+        <ProductFiltersBar value={filters} onChange={setFilters} />
+      </View>
+      <View style={{ paddingHorizontal: 6, paddingTop: 7 }}>
+        {loading || error ? (
+          <LoadState
+            loading={loading}
+            error={error ? "load" : null}
+            retry={error ? load : undefined}
+          />
+        ) : products.length ? (
+          <ProductGrid products={products.map(mapApiProduct)} />
+        ) : (
+          <LoadState empty="No products match these filters" />
+        )}
+        {more && !error && (
+          <TouchableOpacity
+            onPress={loadMore}
+            disabled={fetchingMore}
+            style={{ padding: 18, alignItems: "center" }}
+          >
+            <Text style={{ fontSize: 13, color: c.foreground }}>
+              {fetchingMore ? "Loading…" : "Load more products"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingBottom: 12, gap: 10 },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  logoWrap: { paddingBottom: 6, marginTop: 2 },
-  brandName: { fontSize: 20, fontFamily: 'Inter_700Bold', color: '#fff', letterSpacing: 2 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  location: { fontSize: 12, fontFamily: 'GoogleSans_500Medium', color: 'rgba(255,255,255,0.9)', maxWidth: 180 },
-  headerActions: { flexDirection: 'row', gap: 4, marginTop: -2 },
-  iconBtn: { width: 38, height: 62, alignItems: 'center', justifyContent: 'center', borderRadius: 19, marginTop: 0 },
-  searchTouch: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
-  searchHint: { flex: 1, fontSize: 14, fontFamily: 'GoogleSans_400Regular' },
-  stripe: { paddingVertical: 8, paddingHorizontal: 16 },
-  stripeText: { color: '#fff', fontSize: 12, fontFamily: 'GoogleSans_500Medium', textAlign: 'center' },
-  section: { padding: 16, gap: 14 },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { fontSize: 18, fontFamily: 'GoogleSans_700Bold' },
-  sectionSub: { fontSize: 12, fontFamily: 'GoogleSans_400Regular', marginTop: 2 },
-  seeAll: { fontSize: 13, fontFamily: 'GoogleSans_600SemiBold' },
-  dealBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  dealBadgeText: { color: '#fff', fontSize: 10, fontFamily: 'GoogleSans_700Bold', letterSpacing: 1 },
-  catScroll: { gap: 12, paddingRight: 4 },
-  hScroll: { gap: 12, paddingRight: 16 },
-  gridGap: { gap: 12 },
-  row: { flexDirection: 'row', gap: 12 },
-  errorBox: { margin: 16, padding: 16, borderRadius: 12, borderWidth: 1, gap: 8 },
-  errorTitle: { fontSize: 16, fontFamily: 'GoogleSans_700Bold' },
-  errorText: { fontSize: 13, fontFamily: 'GoogleSans_400Regular', lineHeight: 20 },
-  errorHint: { fontSize: 11, fontFamily: 'GoogleSans_400Regular' },
-  retryBtn: { marginTop: 8, alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
-  retryBtnText: { color: '#fff', fontSize: 14, fontFamily: 'GoogleSans_600SemiBold' },
+const s = StyleSheet.create({
+  heroHeader: { position: "absolute", top: 0, left: 0, right: 0 },
+  benefits: {
+    margin: 6,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderRadius: 3,
+    flexDirection: "row",
+    gap: 12,
+  },
+  benefit: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 7,
+    paddingHorizontal: 9,
+    alignItems: "flex-start",
+  },
+  benefitTitle: {
+    fontSize: 12,
+    color: "#864718",
+    fontFamily: "GoogleSans_700Bold",
+  },
+  benefitSub: { fontSize: 10, color: "#864718", marginTop: 2 },
+  exclusive: {
+    backgroundColor: "#FFF0F5",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    marginTop: 3,
+  },
+  exclusiveTitle: {
+    fontSize: 14,
+    fontFamily: "GoogleSans_700Bold",
+    color: "#D84570",
+  },
+  exclusiveSub: { fontSize: 9, color: "#D66787", marginTop: 3 },
+  exclusiveCta: {
+    borderWidth: 1,
+    borderColor: "#D84570",
+    borderRadius: 4,
+    padding: 7,
+  },
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 7,
+    paddingVertical: 12,
+  },
+  categoryTile: {
+    width: "20%",
+    alignItems: "center",
+    paddingHorizontal: 3,
+    paddingBottom: 5,
+  },
+  offerBubble: {
+    borderRadius: 25,
+    backgroundColor: "#EF251F",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  edits: { padding: 6, gap: 7 },
+  editCaption: {
+    backgroundColor: "#080808",
+    paddingVertical: 8,
+    paddingHorizontal: 3,
+  },
+  collections: {
+    flexDirection: "row",
+    gap: 7,
+    padding: 6,
+    paddingVertical: 12,
+  },
+  collection: { flex: 1, padding: 6, borderRadius: 7 },
+  collectionHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 11,
+    marginTop: 6,
+  },
+  featured: {
+    backgroundColor: "#8C2212",
+    margin: 6,
+    padding: 11,
+    borderRadius: 4,
+    marginVertical: 12,
+  },
 });

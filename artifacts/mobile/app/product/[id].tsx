@@ -1,784 +1,1147 @@
-import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, Alert, Dimensions, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { TextInput } from '@/components/TextInput';
-import { Text } from '@/components/Text';
-import { useLocalSearchParams, router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Path } from 'react-native-svg';
-import SvgIcon from '@/components/SvgIcon';
-import { CartIconNew } from '@/components/TabIcons';
-import * as Haptics from 'expo-haptics';
-import { useColors } from '@/hooks/useColors';
-import { useTheme } from '@/context/ThemeContext';
-import { Product, formatPrice } from '@/constants/data';
-import { useCart } from '@/context/CartContext';
-import { useWishlist } from '@/context/WishlistContext';
-import RatingStars from '@/components/RatingStars';
-import { api, mapApiProduct } from '@/services/api';
-
-const { width: SCREEN_W } = Dimensions.get('window');
-const HERO_HEIGHT = SCREEN_W * 0.95;
-const SHEET_RADIUS = 28;
-const HERO_ICON_SIZE = 24;
-
-/* Demo image variants — same product art, different gradient angle + icon,
-   so the hero behaves like a real multi-photo swipe gallery. */
-const HERO_SLIDES = [
-  { start: { x: 0, y: 0 }, end: { x: 1, y: 1 }, icon: 'cube-outline' as const },
-  { start: { x: 1, y: 0 }, end: { x: 0, y: 1 }, icon: 'bag-outline' as const },
-  { start: { x: 0, y: 1 }, end: { x: 1, y: 0 }, icon: 'sparkles-outline' as const },
-  { start: { x: 0, y: 0.5 }, end: { x: 1, y: 0.5 }, icon: 'star-outline' as const },
-];
-
-/* FA v7 chevron-left */
-function BackChevronIcon({ size, color }: { size: number; color: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 640 640">
-      <Path
-        fill={color}
-        d="M169.4 297.4C156.9 309.9 156.9 330.2 169.4 342.7L361.4 534.7C373.9 547.2 394.2 547.2 406.7 534.7C419.2 522.2 419.2 501.9 406.7 489.4L237.3 320L406.6 150.6C419.1 138.1 419.1 117.8 406.6 105.3C394.1 92.8 373.8 92.8 361.3 105.3L169.3 297.3z"
-      />
-    </Svg>
-  );
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  View,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  useWindowDimensions,
+  Modal,
+  Pressable,
+} from "react-native";
+import { Image } from "expo-image";
+import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Text } from "@/components/Text";
+import { Icon } from "@/components/StoreIcon";
+import { StoreHeader } from "@/components/StoreHeader";
+import { ProductGrid, LoadState } from "@/components/ShopUI";
+import { useColors } from "@/hooks/useColors";
+import { useCart } from "@/context/CartContext";
+import { useWishlist } from "@/context/WishlistContext";
+import { useAuth } from "@/context/AuthContext";
+import { useStorefront } from "@/hooks/useStorefront";
+import {
+  useOffers,
+  bestOffer,
+  offerPrice,
+  StoreOffer,
+} from "@/hooks/useOffers";
+import {
+  api,
+  ApiProduct,
+  ApiProductImage,
+  ApiProductVariant,
+  ApiReview,
+  mapApiProduct,
+} from "@/services/api";
+import { formatPrice } from "@/constants/data";
+type Detail = ApiProduct & {
+  images: ApiProductImage[];
+  variants: ApiProductVariant[];
+  reviews?: ApiReview[];
+};
+function offerTerms(o: StoreOffer) {
+  return `${o.discountType === "percentage" ? `${Number(o.discountValue)}% off` : `${formatPrice(Number(o.discountValue))} off`}${Number(o.minOrderValue) > 0 ? ` on orders from ${formatPrice(Number(o.minOrderValue))}` : ""}${o.maxDiscount ? `, up to ${formatPrice(Number(o.maxDiscount))}` : ""}. ${o.validUntil ? "Valid until " + new Date(o.validUntil).toLocaleDateString("en-IN") + "." : ""}`;
 }
-
-/* FA-style heart icons — filled (wishlisted) and outline (not wishlisted) */
-function HeartIcon({ size, color, filled }: { size: number; color: string; filled: boolean }) {
-  if (filled) {
-    // FA v7 heart filled
-    return (
-      <Svg width={size} height={size} viewBox="0 0 640 640">
-        <Path
-          fill={color}
-          d="M335 151.1C360 116.5 400.2 96 442.9 96C516.4 96 576 155.6 576 229.1L576 231.7C576 343.9 436.1 474.2 363.1 529.9C350.7 539.3 335.5 544 320 544C304.5 544 289.2 539.4 276.9 529.9C203.9 474.2 64 343.9 64 231.7L64 229.1C64 155.6 123.6 96 197.1 96C239.8 96 280 116.5 305 151.1L320 171.8L335 151.1z"
-        />
-      </Svg>
-    );
-  }
-  // FA v7 heart outline
-  return (
-    <Svg width={size} height={size} viewBox="0 0 640 640">
-      <Path
-        fill={color}
-        d="M442.9 144C415.6 144 389.9 157.1 373.9 179.2L339.5 226.8C335 233 327.8 236.7 320.1 236.7C312.4 236.7 305.2 233 300.7 226.8L266.3 179.2C250.3 157.1 224.6 144 197.3 144C150.3 144 112.2 182.1 112.2 229.1C112.2 279 144.2 327.5 180.3 371.4C221.4 421.4 271.7 465.4 306.2 491.7C309.4 494.1 314.1 495.9 320.2 495.9C326.3 495.9 331 494.1 334.2 491.7C368.7 465.4 419 421.3 460.1 371.4C496.3 327.5 528.2 279 528.2 229.1C528.2 182.1 490.1 144 443.1 144zM335 151.1C360 116.5 400.2 96 442.9 96C516.4 96 576 155.6 576 229.1L576 231.7C576 343.9 436.1 474.2 363.1 529.9C350.7 539.3 335.5 544 320 544C304.5 544 289.2 539.4 276.9 529.9C203.9 474.2 64 343.9 64 231.7L64 229.1C64 155.6 123.6 96 197.1 96C239.8 96 280 116.5 305 151.1L320 171.8L335 151.1z"
-      />
-    </Svg>
-  );
-}
-
-const MOCK_REVIEWS = [
-  { id: '1', user: 'Priya S.', rating: 5, date: '2 Jun 2025', text: 'Excellent product! Very happy with the quality and packaging.' },
-  { id: '2', user: 'Rahul K.', rating: 4, date: '15 May 2025', text: 'Good value for money. Fast delivery. Would recommend.' },
-  { id: '3', user: 'Ananya M.', rating: 5, date: '3 Apr 2025', text: 'Amazing! Will definitely buy again. Great seller.' },
-  { id: '4', user: 'Vikram P.', rating: 3, date: '22 Mar 2025', text: 'Decent product but packaging could be improved.' },
-];
-
-/* Lighten (positive) / darken (negative) a hex color by a percent, used to
-   synthesize a small "color options" swatch row from the product's own
-   gradient instead of inventing unrelated fake colors. */
-function shadeHex(hex: string, percent: number): string {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const amt = Math.round(2.55 * percent);
-  let r = (num >> 16) + amt;
-  let g = ((num >> 8) & 0x00ff) + amt;
-  let b = (num & 0x0000ff) + amt;
-  r = Math.max(Math.min(255, r), 0);
-  g = Math.max(Math.min(255, g), 0);
-  b = Math.max(Math.min(255, b), 0);
-  return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1).toUpperCase();
-}
-
-const LETTER_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
-
-/* Parses free-text size ranges already present in clothing specs
-   (e.g. "XS to XXL", "28 to 38") into a concrete list of chips. */
-function parseSizeRange(sizesStr?: string): string[] {
-  if (!sizesStr) return [];
-  const m = sizesStr.match(/^(\S+)\s+to\s+(\S+)$/i);
-  if (!m) return [];
-  const [, from, to] = m;
-  if (/^\d+$/.test(from) && /^\d+$/.test(to)) {
-    const start = parseInt(from, 10);
-    const end = parseInt(to, 10);
-    const out: string[] = [];
-    for (let v = start; v <= end; v += 2) out.push(String(v));
-    return out;
-  }
-  const fromIdx = LETTER_SIZES.indexOf(from.toUpperCase());
-  const toIdx = LETTER_SIZES.indexOf(to.toUpperCase());
-  if (fromIdx === -1 || toIdx === -1) return [];
-  return LETTER_SIZES.slice(fromIdx, toIdx + 1);
-}
-
-export default function ProductDetailScreen() {
-  const colors = useColors();
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
-  const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { addItem, items } = useCart();
-  const { toggle, isInWishlist } = useWishlist();
-  const isWeb = Platform.OS === 'web';
-  const [activeImage, setActiveImage] = useState(0);
-  const [selectedColor, setSelectedColor] = useState(0);
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
-  const [pincode, setPincode] = useState('');
-  const [pincodeChecked, setPincodeChecked] = useState(false);
-  const [showAllSpecs, setShowAllSpecs] = useState(false);
-
-  // Floating hero icons sit directly on the photo with a transparent
-  // background — always white so they stay visible over any gradient.
-  const heroBtnIcon = '#FFFFFF';
-
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loadingProduct, setLoadingProduct] = useState(true);
-
-  useEffect(() => {
-    if (!id) return;
-    setLoadingProduct(true);
-    api.products.get(id)
-      .then(p => setProduct(mapApiProduct(p)))
-      .catch(console.error)
-      .finally(() => setLoadingProduct(false));
+export default function ProductDetail() {
+  const { id } = useLocalSearchParams<{ id: string }>(),
+    c = useColors(),
+    insets = useSafeAreaInsets(),
+    { width } = useWindowDimensions(),
+    cart = useCart(),
+    wish = useWishlist(),
+    { user } = useAuth(),
+    store = useStorefront(),
+    offers = useOffers(),
+    gallery = useRef<ScrollView>(null);
+  const [raw, setRaw] = useState<Detail | null>(null),
+    [related, setRelated] = useState<ApiProduct[]>([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(false),
+    [slide, setSlide] = useState(0),
+    [variantId, setVariantId] = useState(""),
+    [qty, setQty] = useState(1),
+    [busy, setBusy] = useState(false),
+    [added, setAdded] = useState(false),
+    [notice, setNotice] = useState(""),
+    [expanded, setExpanded] = useState(false),
+    [sheet, setSheet] = useState<
+      "offers" | "more" | "guide" | "details" | null
+    >(null),
+    [photoOpen, setPhotoOpen] = useState(false),
+    [photoIndex, setPhotoIndex] = useState(0);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const p = await api.products.get(id);
+      setRaw(p);
+      setSlide(0);
+      setQty(1);
+      setAdded(false);
+      setNotice("");
+      const available = p.variants.filter((v) => v.stock > 0);
+      setVariantId(available.length === 1 ? available[0].id : "");
+      let recommendations = await api.products.list({
+        category: p.categoryId || "",
+        sort: "popular",
+        limit: 20,
+      });
+      if (recommendations.data.filter((item) => item.id !== id).length < 2)
+        recommendations = await api.products.list({
+          sort: "popular",
+          limit: 20,
+        });
+      setRelated(recommendations.data.filter((item) => item.id !== id));
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
-
-  if (loadingProduct) {
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+  useEffect(() => {
+    setAdded(false);
+  }, [variantId, qty]);
+  if (loading || error || !raw)
     return (
-      <View style={[styles.notFound, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: c.background,
+          paddingTop: insets.top,
+        }}
+      >
+        <StoreHeader back />
+        <LoadState
+          loading={loading}
+          error={error ? "load" : null}
+          retry={load}
+        />
       </View>
     );
-  }
-
-  if (!product) {
-    return (
-      <View style={[styles.notFound, { backgroundColor: colors.background }]}>
-        <SvgIcon name="cube-outline" size={56} color={colors.mutedForeground} />
-        <Text style={[styles.notFoundText, { color: colors.foreground }]}>Product not found</Text>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={[styles.backLink, { color: colors.primary }]}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const isWishlisted = isInWishlist(product.id);
-  const inCart = items.find(i => i.product.id === product.id);
-  const isApparel = product.category === 'clothing';
-
-  const colorSwatches = isApparel
-    ? [
-        (product as any).gradient?.[0] ?? '#1E3A5F',
-        (product as any).gradient?.[1] ?? '#3B82F6',
-        shadeHex((product as any).gradient?.[0] ?? '#1E3A5F', -28),
-        shadeHex((product as any).gradient?.[1] ?? '#3B82F6', 22),
-      ]
-    : [];
-
-  const sizeOptions = isApparel ? parseSizeRange(product.specifications.Sizes) : [];
-  // One size is deterministically shown as sold out, purely a stock-driven
-  // visual cue — not a fabricated per-size inventory system.
-  const soldOutSizeIdx = sizeOptions.length > 1 && product.stock < 40
-    ? product.id.charCodeAt(product.id.length - 1) % sizeOptions.length
-    : -1;
-  const effectiveSize = selectedSize ?? sizeOptions.find((_, i) => i !== soldOutSizeIdx) ?? null;
-
-  const bankOfferOff = Math.min(300, Math.round((product.price * 0.1) / 10) * 10);
-
-  const handleImageScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
-    if (idx !== activeImage) setActiveImage(idx);
-  };
-
-  const specs = [
-    { key: 'Category', value: product.category.charAt(0).toUpperCase() + product.category.slice(1) },
-    { key: 'Sold by', value: product.seller },
-    { key: 'Rating', value: `${product.rating} / 5 (${product.reviewCount.toLocaleString()})` },
-    { key: 'Discount', value: `${product.discount}% off` },
-    { key: 'Express Delivery', value: product.isExpress ? 'Available' : 'Standard Only' },
-    { key: 'In Stock', value: product.stock > 0 ? 'Yes' : 'Out of Stock' },
-  ];
-  const visibleSpecs = showAllSpecs ? specs : specs.slice(0, 4);
-
-  const handleAddToCart = () => {
-    addItem(product);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert('Added to Bag', `${product.name} added to your bag.`, [
-      { text: 'View Cart', onPress: () => router.push('/cart') },
-      { text: 'Continue Shopping', style: 'cancel' },
-    ]);
-  };
-
-  const handleBuyNow = () => {
-    addItem(product);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    router.push('/checkout');
-  };
-
-  const handleCheckPincode = () => {
-    if (pincode.trim().length !== 6 || !/^\d{6}$/.test(pincode.trim())) {
-      Alert.alert('Invalid Pincode', 'Please enter a valid 6-digit pincode.');
+  const base = mapApiProduct(raw),
+    variant = raw.variants.find((v) => v.id === variantId),
+    modifier = Number(variant?.priceModifier || 0),
+    p = {
+      ...base,
+      price: base.price + modifier,
+      originalPrice: base.originalPrice + modifier,
+      stock: variant?.stock ?? base.stock,
+    },
+    offer = bestOffer(p.price, offers),
+    images = raw.images.length
+      ? raw.images.map((i) => i.url)
+      : base.image
+        ? [base.image]
+        : [],
+    names = [...new Set(raw.variants.map((v) => v.name))],
+    optionTitle = names.length === 1 ? names[0] : "Options",
+    color =
+      Object.entries(p.specifications).find(([key]) =>
+        /colou?r/i.test(key),
+      )?.[1] || (variant && /colou?r/i.test(variant.name) ? variant.value : ""),
+    sizeGuide = Object.entries(p.specifications).filter(([key]) =>
+      /size|measurement|fit/i.test(key),
+    ),
+    address = user?.addresses.find((a) => a.isDefault) || user?.addresses[0],
+    galleryHeight = width * 1.31,
+    soldOut = raw.variants.length
+      ? raw.variants.every((v) => v.stock < 1)
+      : p.stock < 1,
+    available = raw.variants.length
+      ? !!variant && variant.stock > 0
+      : p.stock > 0;
+  const add = async () => {
+    if (raw.variants.length && !variant) {
+      setNotice(
+        `Please select ${optionTitle.toLowerCase()} before adding to cart.`,
+      );
       return;
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPincodeChecked(true);
+    setBusy(true);
+    setNotice("");
+    try {
+      await cart.addItem(p, {
+        variantId: variant?.id,
+        variantLabel: variant ? `${variant.name}: ${variant.value}` : undefined,
+        quantity: qty,
+      });
+      setAdded(true);
+    } catch (e: any) {
+      setNotice(e.message || "Could not add this item. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   };
-
+  const help = (section: string) =>
+    router.push({ pathname: "/help", params: { section } });
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces>
-
-        {/* ── Hero image — swipeable gallery ── */}
-        <View style={{ height: HERO_HEIGHT }}>
+    <View
+      testID="product-detail"
+      style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}
+    >
+      <StoreHeader
+        back
+        productName={`${p.name} — ${formatPrice(p.price)} on ${store.storeName}`}
+        onMore={() => setSheet("more")}
+      />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 14 }}
+      >
+        <View style={{ height: galleryHeight, backgroundColor: c.muted }}>
           <ScrollView
+            ref={gallery}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={handleImageScroll}
-            style={{ height: HERO_HEIGHT }}
+            onMomentumScrollEnd={(e) =>
+              setSlide(Math.round(e.nativeEvent.contentOffset.x / width))
+            }
           >
-            {HERO_SLIDES.map((slide, i) => (
-              <View key={i} style={{ width: SCREEN_W, height: HERO_HEIGHT }}>
-                <LinearGradient
-                  colors={[(product as any).gradient?.[0] ?? '#1E3A5F', (product as any).gradient?.[1] ?? '#3B82F6']}
-                  style={StyleSheet.absoluteFill}
-                  start={slide.start}
-                  end={slide.end}
+            {images.map((url, i) => (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Open product image ${i + 1}`}
+                key={url + i}
+                activeOpacity={0.95}
+                onPress={() => {
+                  setPhotoIndex(i);
+                  setPhotoOpen(true);
+                }}
+              >
+                <Image
+                  source={{ uri: url }}
+                  style={{ width, height: galleryHeight }}
+                  contentFit="contain"
                 />
-                <View style={styles.heroCenter}>
-                  <SvgIcon name={slide.icon} size={80} color="rgba(255,255,255,0.25)" />
-                </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
-
-          {/* Back button — top-left, floating over image, transparent bg */}
-          <View style={[styles.heroTopBar, { top: insets.top + 8 }]} pointerEvents="box-none">
-            <TouchableOpacity
-              style={styles.heroBtn}
-              onPress={() => router.back()}
-            >
-              <BackChevronIcon size={HERO_ICON_SIZE} color={heroBtnIcon} />
-            </TouchableOpacity>
-
-            {/* Floating action buttons top-right */}
-            <View style={styles.heroActions} pointerEvents="box-none">
-              <TouchableOpacity
-                style={styles.heroBtn}
-                onPress={() => { toggle(product); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+          {!images.length && (
+            <View style={s.emptyImage}>
+              <Icon name="image-outline" size={50} color={c.mutedForeground} />
+              <Text
+                style={{
+                  color: c.mutedForeground,
+                  fontSize: 12,
+                  marginTop: 10,
+                }}
               >
-                <HeartIcon size={HERO_ICON_SIZE} color={isWishlisted ? '#FF4D6D' : heroBtnIcon} filled={isWishlisted} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.heroBtn}>
-                <SvgIcon name="share-outline" size={20} color={heroBtnIcon} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Swipe dots — sit 4px above where the bottom sheet overlaps the image */}
-          <View style={[styles.dotsRow, { bottom: SHEET_RADIUS + 4 }]} pointerEvents="none">
-            {HERO_SLIDES.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.dot,
-                  {
-                    width: i === activeImage ? 16 : 6,
-                    backgroundColor: i === activeImage ? '#fff' : 'rgba(255,255,255,0.45)',
-                  },
-                ]}
-              />
-            ))}
-          </View>
-
-          {/* Discount badge bottom-left */}
-          {product.discount >= 10 && (
-            <View style={[styles.heroBadge, { backgroundColor: colors.primary }]}>
-              <Text style={[styles.heroBadgeText, { color: '#fff' }]}>{product.discount}% OFF</Text>
+                Product image coming soon
+              </Text>
             </View>
           )}
-
-          {/* Express badge bottom-right */}
-          {product.isExpress && (
-            <View style={[styles.heroExpress, { backgroundColor: colors.accent }]}>
-              <SvgIcon name="flash" size={12} color="#fff" />
-              <Text style={styles.heroExpressText}>EXPRESS</Text>
+          {images.length > 1 && (
+            <TouchableOpacity
+              accessibilityLabel="Open product gallery"
+              onPress={() => {
+                setPhotoIndex(slide);
+                setPhotoOpen(true);
+              }}
+              style={s.galleryButton}
+            >
+              <Icon name="copy-outline" size={21} color="#111" />
+            </TouchableOpacity>
+          )}
+          {images.length > 0 && (
+            <View style={s.counter}>
+              <Text style={{ color: "#fff", fontSize: 13 }}>
+                {slide + 1} / {images.length}
+              </Text>
             </View>
           )}
         </View>
-
-        {/* ── Bottom sheet — overlaps image with rounded top ── */}
-        <View style={[
-          styles.sheet,
-          {
-            backgroundColor: colors.card,
-            borderTopLeftRadius: SHEET_RADIUS,
-            borderTopRightRadius: SHEET_RADIUS,
-            marginTop: -SHEET_RADIUS,
-          },
-        ]}>
-          {/* Pull handle */}
-          <View style={styles.sheetHandle}>
-            <View style={[styles.handleBar, { backgroundColor: colors.border }]} />
-          </View>
-
-          {/* Category + name */}
-          <View style={styles.sheetPad}>
-            <Text style={[styles.category, { color: colors.primary }]}>
-              {product.category.toUpperCase()}
+        <View style={s.info}>
+          <View style={s.priceLine}>
+            <Text
+              style={{
+                color: c.accent,
+                fontSize: 21,
+                fontFamily: "GoogleSans_700Bold",
+              }}
+            >
+              {formatPrice(p.price)}
             </Text>
-            <Text style={[styles.productName, { color: colors.foreground }]}>
-              {product.name}
-            </Text>
-
-            <View style={styles.sellerColorRow}>
-              <Text style={[styles.sellerText, { color: colors.mutedForeground }]}>
-                Sold by{' '}
-                <Text style={{ color: colors.primary, fontFamily: 'GoogleSans_600SemiBold' }}>
-                  {product.seller}
-                </Text>
+            {p.originalPrice > p.price && (
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: c.mutedForeground,
+                  textDecorationLine: "line-through",
+                }}
+              >
+                {formatPrice(p.originalPrice)}
               </Text>
-              {colorSwatches.length > 0 && (
-                <View style={styles.colorsTag}>
-                  {colorSwatches.slice(0, 2).map((c, i) => (
-                    <View key={i} style={[styles.colorsTagDot, { backgroundColor: c, marginLeft: i === 0 ? 0 : -6 }]} />
-                  ))}
-                  <Text style={[styles.colorsTagText, { color: colors.mutedForeground }]}>
-                    {colorSwatches.length} colors
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Rating row */}
-            <View style={styles.ratingRow}>
-              <RatingStars rating={product.rating} size={15} />
-              <Text style={[styles.ratingNum, { color: colors.foreground }]}>{product.rating}</Text>
-              <Text style={[styles.reviewCount, { color: colors.mutedForeground }]}>
-                ({product.reviewCount.toLocaleString()})
-              </Text>
-            </View>
-          </View>
-
-          {/* Price section — tinted strip */}
-          <View style={[styles.priceStrip, { backgroundColor: colors.primary + '0C' }]}>
-            <View style={styles.priceRow}>
-              <Text style={[styles.price, { color: colors.foreground }]}>
-                {formatPrice(product.price)}
-              </Text>
-              <Text style={[styles.originalPrice, { color: colors.mutedForeground }]}>
-                {formatPrice(product.originalPrice)}
-              </Text>
-              <View style={[styles.discountPill, { backgroundColor: colors.success + '22' }]}>
-                <Text style={[styles.discountPillText, { color: colors.success }]}>
-                  {product.discount}% off
-                </Text>
-              </View>
-            </View>
-            <Text style={[styles.savingText, { color: colors.success }]}>
-              You save {formatPrice(product.originalPrice - product.price)} 🎉
-            </Text>
-            <Text style={[styles.taxText, { color: colors.mutedForeground }]}>
+            )}
+            <Text style={{ color: c.mutedForeground, fontSize: 10 }}>
               Price inclusive of all taxes
             </Text>
           </View>
-
-          <View style={styles.sheetPad}>
-            {!(product.stock > 0) && (
-              <View style={[styles.infoBanner, { backgroundColor: colors.destructive + '14', borderColor: colors.destructive + '50' }]}>
-                <SvgIcon name="close-circle" size={15} color={colors.destructive} />
-                <Text style={[styles.infoBannerText, { color: colors.destructive }]}>Out of Stock</Text>
-              </View>
-            )}
-
-            {/* Bank offer / coupon box */}
-            <View style={[styles.offerBox, { borderColor: colors.border }]}>
-              <View style={styles.offerHeader}>
-                <SvgIcon name="pricetag-outline" size={16} color={colors.success} />
-                <Text style={[styles.offerHeaderText, { color: colors.success }]}>Bank Offer</Text>
-              </View>
-              <Text style={[styles.offerBody, { color: colors.foreground }]}>
-                Get extra {formatPrice(bankOfferOff)} instant discount with Griper Pay UPI
-              </Text>
-              <TouchableOpacity
-                onPress={() => Alert.alert(
-                  'More Offers',
-                  '• Flat 10% off on your first order\n• ₹100 off when you pay with Griper Wallet\n• Extra 5% off for Griper Plus members'
-                )}
+          {offer && (
+            <View style={s.offerBlock}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 7,
+                  flexWrap: "wrap",
+                }}
               >
-                <Text style={[styles.offerLink, { color: colors.primary }]}>+3 more offers</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Color selector — apparel only, synthesized from the product's own gradient */}
-            {colorSwatches.length > 0 && (
-              <View style={styles.sectionBlock}>
-                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Color</Text>
-                <View style={styles.swatchRow}>
-                  {colorSwatches.map((c, i) => (
-                    <TouchableOpacity
-                      key={i}
-                      onPress={() => { setSelectedColor(i); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-                      style={[
-                        styles.swatchRing,
-                        { borderColor: selectedColor === i ? colors.primary : 'transparent' },
-                      ]}
-                    >
-                      <View style={[styles.swatch, { backgroundColor: c, borderColor: colors.border }]} />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Size selector — apparel only, parsed from the free-text size range */}
-            {sizeOptions.length > 0 && (
-              <View style={styles.sectionBlock}>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Select Size</Text>
-                  <TouchableOpacity onPress={() => Alert.alert('Size Chart', 'Standard Indian sizing. Refer to the size worn by the model for the best fit.')}>
-                    <Text style={[styles.offerLink, { color: colors.primary }]}>Size chart</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.sizeRow}>
-                  {sizeOptions.map((size, i) => {
-                    const disabled = i === soldOutSizeIdx;
-                    const selected = effectiveSize === size;
-                    return (
-                      <TouchableOpacity
-                        key={size}
-                        disabled={disabled}
-                        onPress={() => { setSelectedSize(size); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-                        style={[
-                          styles.sizeChip,
-                          {
-                            borderColor: selected ? colors.primary : colors.border,
-                            backgroundColor: selected ? colors.primary + '14' : 'transparent',
-                            opacity: disabled ? 0.4 : 1,
-                          },
-                        ]}
-                      >
-                        <Text style={[
-                          styles.sizeChipText,
-                          { color: selected ? colors.primary : colors.foreground, textDecorationLine: disabled ? 'line-through' : 'none' },
-                        ]}>
-                          {size}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {/* Delivery & Return Details */}
-            <View style={styles.sectionBlock}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Delivery &amp; Return Details</Text>
-              <View style={[styles.drCard, { borderColor: colors.border }]}>
-                <View style={styles.pincodeRow}>
-                  <SvgIcon name="location-outline" size={16} color={colors.mutedForeground} />
-                  {pincodeChecked ? (
-                    <>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.drTitle, { color: colors.foreground }]}>
-                          {product.isExpress ? 'Delivery in 1-2 days' : 'Delivery in 3-5 days'}
-                        </Text>
-                        <Text style={[styles.drSub, { color: colors.mutedForeground }]}>to {pincode}</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => setPincodeChecked(false)}>
-                        <Text style={[styles.offerLink, { color: colors.primary }]}>Change Pincode</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <>
-                      <TextInput
-                        value={pincode}
-                        onChangeText={t => setPincode(t.replace(/[^0-9]/g, ''))}
-                        placeholder="Enter Pincode"
-                        placeholderTextColor={colors.mutedForeground}
-                        keyboardType="number-pad"
-                        maxLength={6}
-                        style={[styles.pincodeInput, { color: colors.foreground }]}
-                      />
-                      <TouchableOpacity onPress={handleCheckPincode}>
-                        <Text style={[styles.offerLink, { color: colors.primary }]}>Check</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
-                </View>
-                <View style={[styles.drDivider, { backgroundColor: colors.border }]} />
-                <View style={styles.drRow}>
-                  <View style={[styles.drIcon, { backgroundColor: colors.muted }]}>
-                    <SvgIcon name="checkmark-done-circle-outline" size={16} color={colors.mutedForeground} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.drTitle, { color: colors.foreground }]}>7-day Return &amp; Exchange</Text>
-                    <TouchableOpacity onPress={() => Alert.alert('Return Policies', 'Items can be returned within 7 days of delivery if unused and in original packaging.')}>
-                      <Text style={[styles.offerLink, { color: colors.primary }]}>Return Policies</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <View style={[styles.drDivider, { backgroundColor: colors.border }]} />
-                <View style={styles.drRow}>
-                  <View style={[styles.drIcon, { backgroundColor: colors.muted }]}>
-                    <SvgIcon name="cash-outline" size={16} color={colors.mutedForeground} />
-                  </View>
-                  <Text style={[styles.drTitle, { color: colors.foreground }]}>Cash on Delivery Available</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Product Details */}
-            <View style={styles.sectionBlock}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Product Details</Text>
-              <Text style={[styles.description, { color: colors.foreground }]}>{product.description}</Text>
-              <View style={styles.specGrid}>
-                {visibleSpecs.map((spec, i) => (
-                  <View key={i} style={styles.specGridItem}>
-                    <Text style={[styles.specGridKey, { color: colors.mutedForeground }]}>{spec.key}</Text>
-                    <Text style={[styles.specGridVal, { color: colors.foreground }]}>{spec.value}</Text>
-                  </View>
-                ))}
-              </View>
-              {specs.length > 4 && (
-                <TouchableOpacity onPress={() => setShowAllSpecs(v => !v)} style={styles.moreDetailsBtn}>
-                  <Text style={[styles.offerLink, { color: colors.primary }]}>
-                    {showAllSpecs ? 'Show less' : 'More details'}
+                <Text
+                  style={{
+                    color: c.accent,
+                    fontSize: 14,
+                    fontFamily: "GoogleSans_600SemiBold",
+                  }}
+                >
+                  Offer Price {formatPrice(offerPrice(p.price, offer))}*
+                </Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`Offer terms for ${offer.code}`}
+                  onPress={() => setSheet("offers")}
+                  style={[s.code, { borderColor: c.accent }]}
+                >
+                  <Text
+                    style={{
+                      color: c.accent,
+                      fontSize: 12,
+                      fontFamily: "GoogleSans_600SemiBold",
+                    }}
+                  >
+                    {offer.code}
                   </Text>
-                  <SvgIcon name={showAllSpecs ? 'chevron-down' : 'chevron-forward'} size={13} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: c.mutedForeground,
+                  lineHeight: 17,
+                  marginTop: 8,
+                }}
+              >
+                {offerTerms(offer)}{" "}
+                <Text
+                  onPress={() => setSheet("offers")}
+                  style={{ color: c.link }}
+                >
+                  T&C
+                </Text>
+              </Text>
+              {offers.length > 1 && (
+                <TouchableOpacity
+                  onPress={() => setSheet("offers")}
+                  style={s.moreOffers}
+                >
+                  <Text style={{ fontSize: 11, color: "#A7662C" }}>
+                    +{offers.length - 1} more offers ›
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
-
-            {/* Trust badges */}
-            <View style={styles.trustRow}>
-              <View style={styles.trustItem}>
-                <SvgIcon name="shield-checkmark" size={24} color={colors.mutedForeground} />
-                <Text style={[styles.trustText, { color: colors.mutedForeground }]}>Assured Quality</Text>
-              </View>
-              <View style={styles.trustItem}>
-                <SvgIcon name="checkmark-done-circle-outline" size={24} color={colors.mutedForeground} />
-                <Text style={[styles.trustText, { color: colors.mutedForeground }]}>Easy Returns</Text>
-              </View>
-              <View style={styles.trustItem}>
-                <SvgIcon name="cube-outline" size={24} color={colors.mutedForeground} />
-                <Text style={[styles.trustText, { color: colors.mutedForeground }]}>Free Shipping</Text>
-              </View>
+          )}
+          <Text style={[s.productName, { color: c.foreground }]}>{p.name}</Text>
+          {p.reviewCount > 0 && (
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 5,
+                alignItems: "center",
+                marginTop: 8,
+              }}
+            >
+              <Icon name="star" color={c.star} size={12} />
+              <Text style={{ fontSize: 10, color: c.mutedForeground }}>
+                {p.rating.toFixed(1)} · {p.reviewCount}{" "}
+                {p.reviewCount === 1 ? "rating" : "ratings"}
+              </Text>
             </View>
-
-            {/* Ratings & reviews */}
-            <View style={styles.sectionBlock}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Ratings &amp; Reviews</Text>
-              <View style={styles.reviewsList}>
-                <View style={[styles.ratingSummary, { backgroundColor: colors.muted }]}>
-                  <Text style={[styles.ratingBig, { color: colors.foreground }]}>{product.rating}</Text>
-                  <RatingStars rating={product.rating} size={22} />
-                  <Text style={[styles.ratingTotal, { color: colors.mutedForeground }]}>
-                    {product.reviewCount.toLocaleString()} ratings
-                  </Text>
-                </View>
-                {MOCK_REVIEWS.map(review => (
-                  <View key={review.id} style={[styles.reviewCard, { borderBottomColor: colors.border }]}>
-                    <View style={styles.reviewHeader}>
-                      <View style={[styles.reviewAvatar, { backgroundColor: colors.primary }]}>
-                        <Text style={styles.reviewAvatarText}>{review.user.charAt(0)}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.reviewUser, { color: colors.foreground }]}>{review.user}</Text>
-                        <Text style={[styles.reviewDate, { color: colors.mutedForeground }]}>{review.date}</Text>
-                      </View>
-                      <RatingStars rating={review.rating} size={12} />
-                    </View>
-                    <Text style={[styles.reviewText, { color: colors.foreground }]}>{review.text}</Text>
-                  </View>
+          )}
+          {color && (
+            <View style={{ marginTop: 19 }}>
+              <Text style={[s.label, { color: c.foreground }]}>
+                Color: {color}
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="View color photo"
+                onPress={() => {
+                  gallery.current?.scrollTo({ x: 0, animated: true });
+                  setSlide(0);
+                  setPhotoIndex(0);
+                  setPhotoOpen(true);
+                }}
+                style={{
+                  alignSelf: "flex-start",
+                  borderWidth: 1,
+                  borderColor: c.foreground,
+                  marginTop: 10,
+                }}
+                disabled={!images.length}
+              >
+                {images[0] && (
+                  <Image
+                    source={{ uri: images[0] }}
+                    style={{ width: 41, height: 54 }}
+                    contentFit="cover"
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+          {raw.variants.length > 0 && (
+            <View style={{ marginTop: 22 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 13,
+                }}
+              >
+                <Text style={[s.label, { color: c.foreground }]}>
+                  {optionTitle}
+                </Text>
+                {sizeGuide.length > 0 && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={() => setSheet("guide")}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <Icon name="resize-outline" color={c.link} size={13} />
+                    <Text style={{ color: c.link, fontSize: 12 }}>
+                      Size Guide ›
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                {raw.variants.map((v) => (
+                  <TouchableOpacity
+                    key={v.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${v.name} ${v.value}${v.stock < 1 ? ", unavailable" : ""}`}
+                    accessibilityState={{
+                      selected: v.id === variantId,
+                      disabled: v.stock < 1,
+                    }}
+                    disabled={v.stock < 1}
+                    onPress={() => {
+                      setVariantId(v.id);
+                      setQty((q) => Math.max(1, Math.min(q, v.stock)));
+                      setNotice("");
+                    }}
+                    style={[
+                      s.option,
+                      {
+                        borderColor:
+                          v.id === variantId ? c.foreground : c.border,
+                        borderStyle: v.stock < 1 ? "dashed" : "solid",
+                        opacity: v.stock < 1 ? 0.4 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: c.foreground, fontSize: 12 }}>
+                      {names.length > 1 ? `${v.name}: ` : ""}
+                      {v.value}
+                    </Text>
+                    {v.stock > 0 && v.stock <= 5 && (
+                      <Text style={{ fontSize: 9, color: "#B87540" }}>
+                        Almost sold out!
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 ))}
               </View>
             </View>
+          )}
+          <View style={s.quantity}>
+            <Text style={[s.label, { color: c.foreground }]}>Qty</Text>
+            <View style={[s.stepper, { borderColor: c.border }]}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Decrease quantity"
+                disabled={qty <= 1}
+                onPress={() => setQty((q) => q - 1)}
+                style={[
+                  s.step,
+                  { backgroundColor: c.muted, opacity: qty <= 1 ? 0.4 : 1 },
+                ]}
+              >
+                <Icon name="remove" size={18} />
+              </TouchableOpacity>
+              <Text
+                style={{
+                  fontSize: 13,
+                  width: 31,
+                  textAlign: "center",
+                  color: c.foreground,
+                }}
+              >
+                {qty}
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Increase quantity"
+                disabled={qty >= Math.min(p.stock || 1, 99)}
+                onPress={() => setQty((q) => q + 1)}
+                style={[s.step, { backgroundColor: c.muted }]}
+              >
+                <Icon name="add" size={18} />
+              </TouchableOpacity>
+            </View>
+            {!raw.variants.length && p.stock < 1 && (
+              <Text style={{ color: c.destructive, fontSize: 11 }}>
+                Out of stock
+              </Text>
+            )}
           </View>
+          {!!notice && (
+            <Text
+              accessibilityRole="alert"
+              style={{ color: c.destructive, fontSize: 12, marginTop: 12 }}
+            >
+              {notice}
+            </Text>
+          )}
         </View>
-
-        <View style={{ height: isWeb ? 100 : 120 }} />
-      </ScrollView>
-
-      {/* ── Fixed footer — pinned to bottom like a bottom nav bar ── */}
-      {product.stock > 0 && (
-        <View style={[
-          styles.footer,
-          {
-            backgroundColor: colors.card,
-            borderTopColor: colors.border,
-            borderTopWidth: 1,
-            paddingBottom: isWeb ? 16 : insets.bottom + 10,
-          },
-        ]}>
+        <View style={[s.trust, { borderColor: c.muted }]}>
+          {[
+            {
+              icon: "ribbon-outline",
+              label: "Product details",
+              press: () => setSheet("details"),
+            },
+            {
+              icon: "return-down-back-outline",
+              label: "Easy Returns",
+              press: () => help("returns"),
+            },
+            {
+              icon: "car-outline",
+              label: "Free Shipping*",
+              press: () => help("shipping"),
+            },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.label}
+              onPress={item.press}
+              style={{ flex: 1, alignItems: "center", gap: 10 }}
+            >
+              <Icon name={item.icon as any} size={23} />
+              <Text style={{ color: c.foreground, fontSize: 11 }}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={[s.delivery, { borderColor: c.muted }]}>
+          <Text style={[s.heading, { color: c.foreground }]}>
+            Delivery & Return Details
+          </Text>
           <TouchableOpacity
-            style={[
-              styles.cartBtn,
-              isDark
-                ? { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' }
-                : { backgroundColor: colors.muted, borderColor: colors.primary },
-            ]}
-            onPress={handleAddToCart}
+            accessibilityRole="button"
+            accessibilityLabel="Change delivery address"
+            onPress={() => router.push("/addresses")}
+            style={[s.address, { borderColor: c.border }]}
           >
-            <CartIconNew color={isDark ? '#000000' : colors.primary} size={20} />
-            <Text style={[styles.cartBtnText, { color: isDark ? '#000000' : colors.primary }]}>
-              {inCart ? 'Add More' : 'Add to Bag'}
+            <Text
+              style={{
+                color: address ? c.foreground : c.mutedForeground,
+                fontSize: 12,
+                flex: 1,
+              }}
+            >
+              {address
+                ? `${address.pincode} · ${address.city}`
+                : "Select a delivery address"}
+            </Text>
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: "GoogleSans_600SemiBold",
+                color: c.link,
+              }}
+            >
+              {address ? "Change" : "Add"}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[
-              styles.buyBtn,
-              isDark
-                ? { backgroundColor: '#000000', borderColor: colors.border, borderWidth: 1.5 }
-                : { backgroundColor: colors.primary },
-            ]}
-            onPress={handleBuyNow}
+            onPress={() => help("returns")}
+            style={[s.detailRow, { borderColor: c.border }]}
           >
-            <Text style={[styles.buyBtnText, { color: '#fff' }]}>Buy Now</Text>
+            <Icon name="return-down-back-outline" size={22} />
+            <View>
+              <Text style={[s.label, { color: c.foreground }]}>
+                {store.returnsHeadline}
+              </Text>
+              <Text style={{ fontSize: 11, color: c.link, marginTop: 4 }}>
+                Return Policies
+              </Text>
+            </View>
           </TouchableOpacity>
+          <View style={[s.detailRow, { borderColor: "transparent" }]}>
+            <Icon name="cash-outline" size={22} />
+            <Text style={[s.label, { color: c.foreground }]}>
+              Cash on Delivery Available
+            </Text>
+          </View>
         </View>
-      )}
+        <View style={[s.description, { borderColor: c.muted }]}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Product description"
+            accessibilityState={{ expanded }}
+            onPress={() => setExpanded(!expanded)}
+            style={{ flexDirection: "row", alignItems: "center", gap: 15 }}
+          >
+            <Text style={[s.label, { color: c.foreground }]}>Description</Text>
+            <Text
+              numberOfLines={1}
+              style={{
+                flex: 1,
+                color: c.mutedForeground,
+                fontSize: 11,
+                textAlign: "right",
+              }}
+            >
+              {Object.values(p.specifications).slice(0, 3).join(", ") ||
+                p.description}
+            </Text>
+            <Icon
+              name={expanded ? "chevron-up" : "chevron-forward"}
+              size={17}
+            />
+          </TouchableOpacity>
+          {expanded && (
+            <View style={{ paddingTop: 14 }}>
+              <Text
+                style={{
+                  fontSize: 12,
+                  lineHeight: 20,
+                  color: c.mutedForeground,
+                }}
+              >
+                {p.description || "Product details will be added soon."}
+              </Text>
+              {Object.entries(p.specifications).map(([k, v]) => (
+                <View key={k} style={[s.spec, { borderColor: c.border }]}>
+                  <Text
+                    style={{ fontSize: 12, color: c.mutedForeground, flex: 1 }}
+                  >
+                    {k}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: c.foreground, flex: 1 }}>
+                    {v}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+        {raw.reviews && raw.reviews.length > 0 && (
+          <View style={[s.description, { borderColor: c.muted }]}>
+            <Text style={[s.heading, { color: c.foreground }]}>
+              Customer reviews
+            </Text>
+            {raw.reviews.map((r) => (
+              <View key={r.id} style={{ marginTop: 12 }}>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontFamily: "GoogleSans_600SemiBold",
+                    color: c.foreground,
+                  }}
+                >
+                  {r.rating}/5 {r.title}
+                </Text>
+                <Text
+                  style={{
+                    color: c.mutedForeground,
+                    fontSize: 12,
+                    lineHeight: 18,
+                    marginTop: 4,
+                  }}
+                >
+                  {r.comment}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {related.length > 0 && (
+          <View style={{ padding: 6 }}>
+            <Text
+              style={[
+                s.heading,
+                { color: c.foreground, padding: 7, paddingVertical: 14 },
+              ]}
+            >
+              You May Also Like
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 8,
+                paddingHorizontal: 7,
+                marginBottom: 12,
+              }}
+            >
+              {color && (
+                <View style={{ backgroundColor: c.primary, padding: 10 }}>
+                  <Text style={{ fontSize: 11, color: c.primaryForeground }}>
+                    Colour: {color}
+                  </Text>
+                </View>
+              )}
+              {p.seller && (
+                <View style={{ backgroundColor: c.muted, padding: 10 }}>
+                  <Text style={{ fontSize: 11, color: c.foreground }}>
+                    {p.seller}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <ProductGrid products={related.map(mapApiProduct)} />
+          </View>
+        )}
+      </ScrollView>
+      <View
+        style={[
+          s.bottom,
+          {
+            backgroundColor: c.card,
+            borderColor: c.border,
+            paddingBottom: Math.max(insets.bottom, 8),
+          },
+        ]}
+      >
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Save product to wishlist"
+          accessibilityState={{ selected: wish.isInWishlist(p.id) }}
+          onPress={() => wish.toggle(base)}
+          style={[s.wishlist, { borderColor: c.border }]}
+        >
+          <Icon
+            name={wish.isInWishlist(p.id) ? "heart" : "heart-outline"}
+            size={23}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={added ? "View cart" : "Add to cart"}
+          disabled={busy || soldOut}
+          onPress={() => (added ? router.push("/(tabs)/cart") : void add())}
+          style={[
+            s.add,
+            {
+              backgroundColor: c.primary,
+              opacity: soldOut ? 0.4 : 1,
+            },
+          ]}
+        >
+          <Icon
+            name={added ? "checkmark" : "cart-outline"}
+            color={c.primaryForeground}
+            size={22}
+          />
+          <Text
+            style={{
+              fontSize: 14,
+              color: c.primaryForeground,
+              fontFamily: "GoogleSans_600SemiBold",
+            }}
+          >
+            {busy
+              ? "Adding…"
+              : soldOut
+                ? "Out of Stock"
+                : added
+                  ? "Added to Cart"
+                  : "Add to Cart"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      <Modal
+        visible={photoOpen}
+        animationType="fade"
+        onRequestClose={() => setPhotoOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "#080808",
+            paddingTop: insets.top,
+          }}
+        >
+          <View
+            style={{
+              height: 50,
+              paddingHorizontal: 18,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Text style={{ fontSize: 13, color: "#fff" }}>
+              {photoIndex + 1} / {images.length}
+            </Text>
+            <TouchableOpacity
+              accessibilityLabel="Close product gallery"
+              onPress={() => setPhotoOpen(false)}
+            >
+              <Icon name="close" size={26} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            contentOffset={{ x: photoIndex * width, y: 0 }}
+            onMomentumScrollEnd={(e) =>
+              setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / width))
+            }
+          >
+            {images.map((url, i) => (
+              <View key={url + i} style={{ width, justifyContent: "center" }}>
+                <Image
+                  source={{ uri: url }}
+                  style={{ width, height: galleryHeight }}
+                  contentFit="contain"
+                />
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+      <Modal
+        visible={sheet !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSheet(null)}
+      >
+        <Pressable
+          onPress={() => setSheet(null)}
+          style={[s.overlay, { backgroundColor: c.overlay }]}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={[
+              s.sheet,
+              {
+                backgroundColor: c.card,
+                paddingBottom: Math.max(insets.bottom, 20),
+              },
+            ]}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 18,
+              }}
+            >
+              <Text style={[s.heading, { color: c.foreground }]}>
+                {sheet === "offers"
+                  ? "Available offers"
+                  : sheet === "guide"
+                    ? "Size Guide"
+                    : sheet === "more"
+                      ? "Product options"
+                      : "Product details"}
+              </Text>
+              <TouchableOpacity
+                accessibilityLabel="Close product options"
+                onPress={() => setSheet(null)}
+              >
+                <Icon name="close" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {sheet === "offers" ? (
+                offers.length ? (
+                  offers.map((o) => (
+                    <View
+                      key={o.id}
+                      style={[s.offerCard, { borderColor: c.border }]}
+                    >
+                      <Text
+                        style={{
+                          color: c.accent,
+                          fontFamily: "GoogleSans_700Bold",
+                          fontSize: 15,
+                        }}
+                      >
+                        {o.code}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: c.mutedForeground,
+                          lineHeight: 19,
+                          marginTop: 8,
+                        }}
+                      >
+                        {offerTerms(o)}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSheet(null);
+                          router.push({
+                            pathname: "/(tabs)/cart",
+                            params: { coupon: o.code },
+                          });
+                        }}
+                        style={{ alignSelf: "flex-start", marginTop: 12 }}
+                      >
+                        <Text style={{ color: c.link, fontSize: 12 }}>
+                          Use at checkout ›
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={{ color: c.mutedForeground }}>
+                    No active offers right now.
+                  </Text>
+                )
+              ) : sheet === "more" ? (
+                <>
+                  {[
+                    {
+                      label: wish.isInWishlist(p.id)
+                        ? "Remove from wishlist"
+                        : "Save to wishlist",
+                      press: () => {
+                        wish.toggle(base);
+                        setSheet(null);
+                      },
+                    },
+                    {
+                      label: "View all offers",
+                      press: () => setSheet("offers"),
+                    },
+                    {
+                      label: "Customer care",
+                      press: () => {
+                        setSheet(null);
+                        help("support");
+                      },
+                    },
+                  ].map((item) => (
+                    <TouchableOpacity
+                      key={item.label}
+                      onPress={item.press}
+                      style={{
+                        paddingVertical: 16,
+                        borderBottomWidth: 1,
+                        borderColor: c.border,
+                      }}
+                    >
+                      <Text style={{ color: c.foreground, fontSize: 14 }}>
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: c.mutedForeground,
+                      lineHeight: 21,
+                    }}
+                  >
+                    {sheet === "guide"
+                      ? "Measurements and fit information supplied for this product."
+                      : p.description}
+                  </Text>
+                  {(sheet === "guide"
+                    ? sizeGuide
+                    : Object.entries(p.specifications)
+                  ).map(([k, v]) => (
+                    <View key={k} style={[s.spec, { borderColor: c.border }]}>
+                      <Text
+                        style={{
+                          color: c.mutedForeground,
+                          fontSize: 12,
+                          flex: 1,
+                        }}
+                      >
+                        {k}
+                      </Text>
+                      <Text
+                        style={{ color: c.foreground, fontSize: 12, flex: 1 }}
+                      >
+                        {v}
+                      </Text>
+                    </View>
+                  ))}
+                </>
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  notFoundText: { fontSize: 18, fontFamily: 'GoogleSans_500Medium' },
-  backLink: { fontSize: 15, fontFamily: 'GoogleSans_600SemiBold' },
-
-  /* Hero */
-  heroTopBar: { position: 'absolute', left: 14, right: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 },
-  heroActions: { flexDirection: 'row', gap: 2 },
-  heroBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  heroCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  heroBadge: { position: 'absolute', bottom: SHEET_RADIUS + 10, left: 14, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  heroBadgeText: { fontSize: 13, fontFamily: 'GoogleSans_700Bold' },
-  heroExpress: { position: 'absolute', bottom: SHEET_RADIUS + 10, right: 14, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  heroExpressText: { fontSize: 10, fontFamily: 'GoogleSans_700Bold', color: '#fff' },
-  dotsRow: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5 },
-  dot: { height: 6, borderRadius: 3 },
-
-  /* Bottom sheet */
-  sheet: {
-    overflow: 'hidden',
-    // shadow to lift the sheet above image
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowOffset: { width: 0, height: -4 },
-    shadowRadius: 12,
-    elevation: 8,
+const s = StyleSheet.create({
+  emptyImage: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  sheetHandle: { alignItems: 'center', paddingTop: 10, paddingBottom: 4 },
-  handleBar: { width: 40, height: 4, borderRadius: 2 },
-  sheetPad: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 12, gap: 8 },
-
-  /* Product info */
-  category: { fontSize: 11, fontFamily: 'GoogleSans_700Bold', letterSpacing: 1.4 },
-  productName: { fontSize: 20, fontFamily: 'GoogleSans_700Bold', lineHeight: 28 },
-  sellerColorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  sellerText: { fontSize: 13, fontFamily: 'GoogleSans_400Regular', flexShrink: 1 },
-  colorsTag: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  colorsTagDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: '#fff' },
-  colorsTagText: { fontSize: 12, fontFamily: 'GoogleSans_500Medium' },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  ratingNum: { fontSize: 14, fontFamily: 'GoogleSans_600SemiBold' },
-  reviewCount: { fontSize: 12, fontFamily: 'GoogleSans_400Regular' },
-
-  /* Price strip */
-  priceStrip: { paddingHorizontal: 20, paddingVertical: 14, gap: 4 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  price: { fontSize: 26, fontFamily: 'GoogleSans_700Bold' },
-  originalPrice: { fontSize: 16, fontFamily: 'GoogleSans_400Regular', textDecorationLine: 'line-through' },
-  discountPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  discountPillText: { fontSize: 12, fontFamily: 'GoogleSans_700Bold' },
-  savingText: { fontSize: 13, fontFamily: 'GoogleSans_600SemiBold' },
-  taxText: { fontSize: 11, fontFamily: 'GoogleSans_400Regular', marginTop: 2 },
-
-  /* Banners */
-  infoBanner: { flexDirection: 'row', alignItems: 'center', gap: 7, padding: 10, borderRadius: 10, borderWidth: 1, marginBottom: 4 },
-  infoBannerText: { fontSize: 13, fontFamily: 'GoogleSans_600SemiBold' },
-
-  /* Offer / coupon box */
-  offerBox: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6, marginBottom: 4 },
-  offerHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  offerHeaderText: { fontSize: 13, fontFamily: 'GoogleSans_700Bold' },
-  offerBody: { fontSize: 13, fontFamily: 'GoogleSans_400Regular', lineHeight: 19 },
-  offerLink: { fontSize: 12.5, fontFamily: 'GoogleSans_600SemiBold' },
-
-  /* Section blocks (color / size / delivery / details) */
-  sectionBlock: { gap: 10, marginTop: 14 },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { fontSize: 15, fontFamily: 'GoogleSans_700Bold' },
-
-  /* Color swatches */
-  swatchRow: { flexDirection: 'row', gap: 12 },
-  swatchRing: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  swatch: { width: 30, height: 30, borderRadius: 15, borderWidth: 1 },
-
-  /* Size chips */
-  sizeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  sizeChip: { minWidth: 46, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10, borderWidth: 1.3, alignItems: 'center' },
-  sizeChipText: { fontSize: 13, fontFamily: 'GoogleSans_600SemiBold' },
-
-  /* Delivery & Returns */
-  drCard: { borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
-  pincodeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
-  pincodeInput: { flex: 1, fontSize: 14, fontFamily: 'GoogleSans_500Medium', paddingVertical: 0 },
-  drRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
-  drIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  drTitle: { fontSize: 13, fontFamily: 'GoogleSans_600SemiBold' },
-  drSub: { fontSize: 12, fontFamily: 'GoogleSans_400Regular', marginTop: 1 },
-  drDivider: { height: 1, marginLeft: 12 },
-
-  /* Description */
-  description: { fontSize: 14, fontFamily: 'GoogleSans_400Regular', lineHeight: 22 },
-
-  /* Product details 2-col grid */
-  specGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  specGridItem: { width: '50%', paddingRight: 10, marginBottom: 14 },
-  specGridKey: { fontSize: 12, fontFamily: 'GoogleSans_400Regular', marginBottom: 3 },
-  specGridVal: { fontSize: 13.5, fontFamily: 'GoogleSans_600SemiBold' },
-  moreDetailsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end' },
-
-  /* Trust badges */
-  trustRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20 },
-  trustItem: { alignItems: 'center', gap: 6, flex: 1 },
-  trustText: { fontSize: 11, fontFamily: 'GoogleSans_500Medium', textAlign: 'center' },
-
-  /* Reviews */
-  reviewsList: { gap: 16 },
-  ratingSummary: { borderRadius: 14, padding: 20, alignItems: 'center', gap: 8 },
-  ratingBig: { fontSize: 52, fontFamily: 'GoogleSans_700Bold' },
-  ratingTotal: { fontSize: 12, fontFamily: 'GoogleSans_400Regular' },
-  reviewCard: { paddingBottom: 16, borderBottomWidth: 1, gap: 10 },
-  reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  reviewAvatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  reviewAvatarText: { fontSize: 16, fontFamily: 'GoogleSans_700Bold', color: '#fff' },
-  reviewUser: { fontSize: 14, fontFamily: 'GoogleSans_600SemiBold' },
-  reviewDate: { fontSize: 12, fontFamily: 'GoogleSans_400Regular', marginTop: 1 },
-  reviewText: { fontSize: 14, fontFamily: 'GoogleSans_400Regular', lineHeight: 21 },
-
-  /* Footer — fixed like a bottom nav bar */
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 12,
+  galleryButton: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 18,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  counter: {
+    position: "absolute",
+    right: 13,
+    bottom: 12,
+    backgroundColor: "#0008",
+    borderRadius: 15,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+  },
+  info: { paddingHorizontal: 13, paddingTop: 13, paddingBottom: 20 },
+  priceLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    flexWrap: "wrap",
+  },
+  offerBlock: { marginTop: 21, marginBottom: 20 },
+  code: {
+    borderWidth: 1,
+    borderStyle: "dashed",
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+  },
+  moreOffers: {
+    borderWidth: 1,
+    borderColor: "#BB804C",
+    alignSelf: "flex-start",
+    padding: 4,
+    marginTop: 9,
+  },
+  productName: {
+    fontSize: 14,
+    fontFamily: "GoogleSans_700Bold",
+    lineHeight: 21,
+    marginTop: 16,
+  },
+  label: { fontSize: 13, fontFamily: "GoogleSans_600SemiBold" },
+  heading: { fontSize: 15, fontFamily: "GoogleSans_700Bold" },
+  option: {
+    borderWidth: 1,
+    borderRadius: 20,
+    minWidth: 47,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+  },
+  quantity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+    marginTop: 22,
+  },
+  stepper: {
+    borderWidth: 1,
+    borderRadius: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  step: {
+    width: 29,
+    height: 29,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  trust: {
+    borderTopWidth: 8,
+    borderBottomWidth: 8,
+    paddingVertical: 22,
+    flexDirection: "row",
+  },
+  delivery: { borderBottomWidth: 8, padding: 13, paddingTop: 20 },
+  address: {
+    marginTop: 16,
+    marginBottom: 11,
+    borderWidth: 1,
+    height: 42,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: -2 },
-    shadowRadius: 8,
-    elevation: 12,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
   },
-  cartBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 16, borderRadius: 16, borderWidth: 1.5 },
-  cartBtnText: { fontSize: 14.5, fontFamily: 'GoogleSans_700Bold', letterSpacing: 0.1 },
-  buyBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, borderRadius: 16 },
-  buyBtnText: { fontSize: 15, fontFamily: 'GoogleSans_700Bold', letterSpacing: 0.2 },
+  description: { padding: 14, paddingVertical: 18, borderBottomWidth: 8 },
+  spec: {
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  bottom: {
+    borderTopWidth: 1,
+    paddingTop: 8,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    gap: 10,
+  },
+  wishlist: {
+    width: 48,
+    height: 43,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  add: {
+    height: 43,
+    flex: 1,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  overlay: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
+    maxHeight: "78%",
+    padding: 20,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+  },
+  offerCard: { padding: 15, borderWidth: 1, marginBottom: 12 },
 });
