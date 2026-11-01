@@ -3,6 +3,11 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
+    "local:setup": "node scripts/local-store.mjs setup",
+    "local": "node scripts/local-store.mjs start",
+    "local:api": "node scripts/local-store.mjs api",
+    "local:app": "node scripts/local-store.mjs app",
+    "test:local": "node scripts/test-local-store.mjs",
     "preinstall": "npx only-allow pnpm",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",

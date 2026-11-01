@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import { Address, User } from "@/constants/data";
+import { storeStorageKey } from "@/constants/storage";
 import {
   api,
   saveTokens,
@@ -33,7 +34,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const STORAGE_KEY = "@griper_user_cache";
+const STORAGE_KEY = storeStorageKey("@griper_user_cache");
 
 function mapApiUser(apiUser: ApiUser, addresses: any[] = []): User {
   return {
