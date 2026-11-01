@@ -2,15 +2,20 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 const testUrl = process.env.TEST_DATABASE_URL;
-if (!testUrl || !new URL(testUrl).pathname.endsWith("_test"))
+const localMode = process.env.GRIPER_LOCAL_MODE === "1";
+if (localMode && !process.env.GRIPER_LOCAL_DATA_DIR?.endsWith("_test"))
+  throw new Error(
+    "Embedded tests require an isolated local directory ending in _test.",
+  );
+if (!localMode && (!testUrl || !new URL(testUrl).pathname.endsWith("_test")))
   throw new Error(
     "Set TEST_DATABASE_URL to an isolated database ending in _test. Apply the schema first.",
   );
-process.env.DATABASE_URL = testUrl;
+if (testUrl) process.env.DATABASE_URL = testUrl;
 process.env.JWT_SECRET = randomBytes(32).toString("hex");
 process.env.REFRESH_SECRET = randomBytes(32).toString("hex");
 const { default: app } = await import("../src/app");
-const { db, pool } = await import("@workspace/db");
+const { db, closeDatabase } = await import("@workspace/db");
 const { users } = await import("@workspace/db/schema");
 const { default: bcrypt } = await import("bcryptjs");
 const ownerEmail = "rememberfrxst@gmail.com",
@@ -33,7 +38,7 @@ after(async () => {
   await new Promise<void>((resolve, reject) =>
     server.close((e) => (e ? reject(e) : resolve())),
   );
-  await pool.end();
+  await closeDatabase();
 });
 const base = `http://127.0.0.1:${(server.address() as any).port}/api`;
 async function request(

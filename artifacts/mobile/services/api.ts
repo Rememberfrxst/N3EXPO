@@ -5,6 +5,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { storeStorageKey } from "@/constants/storage";
 
 function stripTrailingSlash(url: string): string {
   return url.replace(/\/$/, "");
@@ -79,8 +80,8 @@ if (__DEV__) {
   console.log("[API] Using base URL:", getApiBaseUrl());
 }
 
-const TOKEN_KEY = "@griper_access_token";
-const REFRESH_KEY = "@griper_refresh_token";
+const TOKEN_KEY = storeStorageKey("@griper_access_token");
+const REFRESH_KEY = storeStorageKey("@griper_refresh_token");
 
 export async function getAccessToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);

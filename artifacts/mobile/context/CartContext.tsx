@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { Order, Product } from "@/constants/data";
+import { storeStorageKey } from "@/constants/storage";
 import { api, ApiCartItem, mapApiProduct } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 
@@ -108,8 +109,8 @@ function mapApiOrder(o: any): Order {
 }
 
 const CartContext = createContext<CartContextType | null>(null);
-const CART_KEY = "@griper_cart";
-const ORDERS_KEY = "@griper_orders";
+const CART_KEY = storeStorageKey("@griper_cart");
+const ORDERS_KEY = storeStorageKey("@griper_orders");
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();

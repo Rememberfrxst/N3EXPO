@@ -6,7 +6,7 @@
 
 A shopping app for Android, iOS and web, with an owner-only Store Studio for running the catalog, campaigns and orders.
 
-[Features](#features) · [Screenshots](#screenshots) · [Run locally](#run-locally) · [Android download](#android-download) · [Admin setup](#admin-setup)
+[Features](#features) · [Screenshots](#screenshots) · [Local testing without PostgreSQL](#local-testing-without-postgresql) · [Run locally](#run-locally) · [Android download](#android-download) · [Admin setup](#admin-setup)
 
 </div>
 
@@ -96,6 +96,22 @@ The admin and app use the same API/database. Admin content is not browser-only s
 
 ## Run locally
 
+### Local testing without PostgreSQL
+
+On **Linux x86_64**, use Node.js 24 and pnpm 11.25.0. You can run the complete app/admin/order flow with an embedded PGlite database, without installing a database server, Docker or a cloud account:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm local:setup
+pnpm local
+```
+
+Setup privately prompts for the owner password, creates the schema and adds a sample catalog once. The owner email is **rememberfrxst@gmail.com**. Open **http://localhost:5173** for the admin; use Expo's **w** shortcut for the app browser preview, or SDK 54-compatible Expo Go on the same Wi-Fi. The launcher prints the LAN API address. Products, users and test orders persist in the Git-ignored **`.local/griper/`** directory. Ctrl+C stops the services.
+
+This is development-only storage. COD test orders work; real payment/delivery operations and direct cloud image uploads are not configured. Hosted image URLs can be used. See the [complete local testing guide](docs/local-testing.md) for the phone connection, owner setup, backup and alternate ports.
+
+### External PostgreSQL setup
+
 Use Node.js 24, pnpm 11.25 and PostgreSQL 17.
 
 ```bash
@@ -176,6 +192,7 @@ After the workflow is present on the default branch:
 
 ```bash
 pnpm run typecheck
+pnpm run test:local
 pnpm --filter @workspace/api-server run build
 pnpm --filter @workspace/admin-web run build
 cd artifacts/mobile && pnpm exec expo export --platform web

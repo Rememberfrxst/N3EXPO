@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { Product } from '@/constants/data';
 import { api, ApiWishlistItem, mapApiProduct } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
+import { storeStorageKey } from '@/constants/storage';
 
 interface WishlistContextType {
   items: Product[];
@@ -11,7 +12,7 @@ interface WishlistContextType {
 }
 
 const WishlistContext = createContext<WishlistContextType | null>(null);
-const STORAGE_KEY = '@griper_wishlist';
+const STORAGE_KEY = storeStorageKey('@griper_wishlist');
 
 export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<Product[]>([]);
