@@ -1,14 +1,26 @@
-import { Router } from 'express';
-import { db } from '@workspace/db';
-import { carts, cartItems, products, productImages, productVariants } from '@workspace/db/schema';
-import { eq, and, asc } from 'drizzle-orm';
-import { requireAuth, AuthRequest } from '../middlewares/auth';
+import { couponDiscount } from "../lib/pricing";
+import { Router } from "express";
+import { db } from "@workspace/db";
+import {
+  carts,
+  cartItems,
+  products,
+  productImages,
+  productVariants,
+  coupons,
+} from "@workspace/db/schema";
+import { eq, and, asc } from "drizzle-orm";
+import { requireAuth, AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 
 // Helper to get or create cart for user
 async function getOrCreateCart(userId: string) {
-  const existing = await db.select().from(carts).where(eq(carts.userId, userId)).limit(1);
+  const existing = await db
+    .select()
+    .from(carts)
+    .where(eq(carts.userId, userId))
+    .limit(1);
   if (existing.length > 0) {
     return existing[0];
   }
@@ -17,9 +29,12 @@ async function getOrCreateCart(userId: string) {
 }
 
 // GET /api/cart — Get user's cart and its items
-router.get('/', requireAuth, async (req: AuthRequest, res) => {
+router.get("/", requireAuth, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     const cart = await getOrCreateCart(req.user.id);
 
     const items = await db
@@ -43,7 +58,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
           value: productVariants.value,
           priceModifier: productVariants.priceModifier,
           stock: productVariants.stock,
-        }
+        },
       })
       .from(cartItems)
       .innerJoin(products, eq(cartItems.productId, products.id))
@@ -59,11 +74,13 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
       images = await db
         .select({ productId: productImages.productId, url: productImages.url })
         .from(productImages)
-        .where(and(
-          eq(productImages.isPrimary, true),
-          // check if in array (using raw SQL because inArray is easier but this is simple enough)
-          // Actually, drizzle has inArray helper: inArray(productImages.productId, productIds)
-        ));
+        .where(
+          and(
+            eq(productImages.isPrimary, true),
+            // check if in array (using raw SQL because inArray is easier but this is simple enough)
+            // Actually, drizzle has inArray helper: inArray(productImages.productId, productIds)
+          ),
+        );
     }
 
     const imageMap = new Map(images.map((img) => [img.productId, img.url]));
@@ -72,49 +89,71 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
       product: {
         ...i.product,
         imageUrl: imageMap.get(i.productId) || null,
-      }
+      },
     }));
 
     res.json({ cartId: cart.id, items: result });
   } catch (error) {
-    console.error('Get cart error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Get cart error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // POST /api/cart — Add item to cart
-router.post('/', requireAuth, async (req: AuthRequest, res) => {
+router.post("/", requireAuth, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     const { productId, variantId, quantity = 1 } = req.body;
 
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+      res
+        .status(400)
+        .json({ error: "Quantity must be a positive integer up to 999" });
+      return;
+    }
     if (!productId) {
-      res.status(400).json({ error: 'productId is required' });
+      res.status(400).json({ error: "productId is required" });
       return;
     }
 
     // Verify product exists and check stock
-    const prodRows = await db.select().from(products).where(eq(products.id, productId)).limit(1);
-    if (!prodRows.length) {
-      res.status(404).json({ error: 'Product not found' });
+    const prodRows = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, productId))
+      .limit(1);
+    if (!prodRows.length || !prodRows[0].isActive) {
+      res.status(404).json({ error: "Product not found" });
       return;
     }
     const product = prodRows[0];
 
     // Check variant if provided
     if (variantId) {
-      const varRows = await db.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
+      const varRows = await db
+        .select()
+        .from(productVariants)
+        .where(
+          and(
+            eq(productVariants.id, variantId),
+            eq(productVariants.productId, productId),
+          ),
+        )
+        .limit(1);
       if (!varRows.length) {
-        res.status(404).json({ error: 'Product variant not found' });
+        res.status(404).json({ error: "Product variant not found" });
         return;
       }
-      if (varRows[0].stock < quantity) {
-        res.status(400).json({ error: 'Insufficient variant stock' });
+      if ((varRows[0].stock ?? 0) < quantity) {
+        res.status(400).json({ error: "Insufficient variant stock" });
         return;
       }
     } else {
       if ((product.stock || 0) < quantity) {
-        res.status(400).json({ error: 'Insufficient stock' });
+        res.status(400).json({ error: "Insufficient stock" });
         return;
       }
     }
@@ -125,14 +164,27 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
     const existingItems = await db
       .select()
       .from(cartItems)
-      .where(and(
-        eq(cartItems.cartId, cart.id),
-        eq(cartItems.productId, productId),
-      ));
-    
-    // Better way to check exact matching logic:
-    const matched = existingItems.find((item) => item.variantId === (variantId || null));
+      .where(
+        and(eq(cartItems.cartId, cart.id), eq(cartItems.productId, productId)),
+      );
 
+    // Better way to check exact matching logic:
+    const matched = existingItems.find(
+      (item) => item.variantId === (variantId || null),
+    );
+
+    const available = variantId
+      ? (
+          await db
+            .select()
+            .from(productVariants)
+            .where(eq(productVariants.id, variantId))
+        )[0]?.stock
+      : product.stock;
+    if ((matched?.quantity || 0) + quantity > (available || 0)) {
+      res.status(400).json({ error: "Insufficient stock" });
+      return;
+    }
     if (matched) {
       const updated = await db
         .update(cartItems)
@@ -153,20 +205,23 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       res.status(201).json(inserted[0]);
     }
   } catch (error) {
-    console.error('Add to cart error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Add to cart error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // PATCH /api/cart/:itemId — Update quantity
-router.patch('/:itemId', requireAuth, async (req: AuthRequest, res) => {
+router.patch("/:itemId", requireAuth, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
-    const { itemId } = req.params;
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const itemId = String(req.params.itemId);
     const { quantity } = req.body;
 
-    if (quantity === undefined || quantity < 1) {
-      res.status(400).json({ error: 'Quantity must be at least 1' });
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+      res.status(400).json({ error: "Quantity must be at least 1" });
       return;
     }
 
@@ -180,10 +235,27 @@ router.patch('/:itemId', requireAuth, async (req: AuthRequest, res) => {
       .limit(1);
 
     if (!itemRows.length) {
-      res.status(404).json({ error: 'Cart item not found' });
+      res.status(404).json({ error: "Cart item not found" });
       return;
     }
 
+    const item = itemRows[0];
+    const [product] = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, item.productId));
+    let available = product?.isActive ? product.stock || 0 : 0;
+    if (item.variantId) {
+      const [v] = await db
+        .select()
+        .from(productVariants)
+        .where(eq(productVariants.id, item.variantId));
+      available = product?.isActive ? v?.stock || 0 : 0;
+    }
+    if (quantity > available) {
+      res.status(400).json({ error: "Insufficient stock" });
+      return;
+    }
     const updated = await db
       .update(cartItems)
       .set({ quantity })
@@ -192,16 +264,19 @@ router.patch('/:itemId', requireAuth, async (req: AuthRequest, res) => {
 
     res.json(updated[0]);
   } catch (error) {
-    console.error('Update cart item error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Update cart item error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // DELETE /api/cart/:itemId — Remove item
-router.delete('/:itemId', requireAuth, async (req: AuthRequest, res) => {
+router.delete("/:itemId", requireAuth, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
-    const { itemId } = req.params;
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const itemId = String(req.params.itemId);
     const cart = await getOrCreateCart(req.user.id);
 
     const deleted = await db
@@ -210,30 +285,72 @@ router.delete('/:itemId', requireAuth, async (req: AuthRequest, res) => {
       .returning();
 
     if (!deleted.length) {
-      res.status(404).json({ error: 'Cart item not found' });
+      res.status(404).json({ error: "Cart item not found" });
       return;
     }
 
-    res.json({ message: 'Item removed from cart' });
+    res.json({ message: "Item removed from cart" });
   } catch (error) {
-    console.error('Delete cart item error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Delete cart item error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // DELETE /api/cart — Clear entire cart
-router.delete('/', requireAuth, async (req: AuthRequest, res) => {
+router.delete("/", requireAuth, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     const cart = await getOrCreateCart(req.user.id);
 
     await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
 
-    res.json({ message: 'Cart cleared' });
+    res.json({ message: "Cart cleared" });
   } catch (error) {
-    console.error('Clear cart error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Clear cart error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
+router.post("/apply-coupon", requireAuth, async (req: AuthRequest, res) => {
+  try {
+    if (typeof req.body.code !== "string") {
+      res.status(400).json({ error: "Coupon code is required" });
+      return;
+    }
+    const [coupon] = await db
+      .select()
+      .from(coupons)
+      .where(eq(coupons.code, req.body.code.trim().toUpperCase()));
+    if (!coupon) {
+      res.status(400).json({ error: "Coupon not found" });
+      return;
+    }
+    const cart = await getOrCreateCart(req.user!.id);
+    const items = await db
+      .select({
+        quantity: cartItems.quantity,
+        price: products.price,
+        modifier: productVariants.priceModifier,
+      })
+      .from(cartItems)
+      .innerJoin(products, eq(products.id, cartItems.productId))
+      .leftJoin(productVariants, eq(productVariants.id, cartItems.variantId))
+      .where(eq(cartItems.cartId, cart.id));
+    const subtotal = items.reduce(
+      (sum, i) =>
+        sum + (Number(i.price) + Number(i.modifier || 0)) * i.quantity,
+      0,
+    );
+    res.json({
+      code: coupon.code,
+      discount: couponDiscount(coupon, subtotal),
+      discountType: coupon.discountType,
+    });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
 export default router;

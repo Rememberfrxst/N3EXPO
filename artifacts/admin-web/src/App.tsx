@@ -1,17 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { adminApi, getAccessToken, clearAccessToken } from './lib/api';
-import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
-import { Products } from './pages/Products';
-import { Orders } from './pages/Orders';
-import { Customers } from './pages/Customers';
-import { Payments } from './pages/Payments';
-import { Promotions } from './pages/Promotions';
-import { Banners } from './pages/Banners';
-import { Analytics } from './pages/Analytics';
-import { Settings } from './pages/Settings';
-
-import { Categories } from './pages/Categories';
+import React, { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Package,
@@ -20,120 +7,175 @@ import {
   Users,
   CreditCard,
   Tag,
-  Image as ImageIcon,
+  Image,
   BarChart3,
   Settings as SettingsIcon,
   LogOut,
-  ShieldCheck,
-} from 'lucide-react';
-
+  Menu,
+  ChevronRight,
+  ArrowUpRight,
+} from "lucide-react";
+import { adminApi, getAccessToken, clearAccessToken } from "./lib/api";
+import { Login } from "./pages/Login";
+import { Dashboard } from "./pages/Dashboard";
+import { Products, Categories, Banners, Promotions } from "./pages/Catalog";
+import { Orders } from "./pages/Orders";
+import { Customers } from "./pages/Customers";
+import { Payments } from "./pages/Payments";
+import { Analytics } from "./pages/Analytics";
+import { Settings } from "./pages/Settings";
+const nav = [
+  { id: "dashboard", label: "Overview", icon: LayoutDashboard },
+  { id: "products", label: "Products", icon: Package },
+  { id: "categories", label: "Categories", icon: FolderTree },
+  { id: "orders", label: "Orders", icon: ShoppingCart },
+  { id: "customers", label: "Customers", icon: Users },
+  { id: "promotions", label: "Offers & coupons", icon: Tag },
+  { id: "banners", label: "Banners & events", icon: Image },
+  { id: "payments", label: "Payments", icon: CreditCard },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
+  { id: "settings", label: "Store settings", icon: SettingsIcon },
+];
 export function App() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'customers' | 'payments' | 'promotions' | 'banners' | 'analytics' | 'settings'>('dashboard');
-
+  const [user, setUser] = useState<any>(null),
+    [loading, setLoading] = useState(true),
+    [tab, setTab] = useState(location.hash.slice(1) || "dashboard"),
+    [mobile, setMobile] = useState(false);
   useEffect(() => {
-    const token = getAccessToken();
-    if (token) {
-      adminApi.auth.me()
-        .then(res => {
-          if (res.role === 'admin') {
-            setUser(res);
-          } else {
-            clearAccessToken();
-          }
+    if (getAccessToken())
+      adminApi.auth
+        .me()
+        .then((u) => {
+          if (u.role === "admin") setUser(u);
+          else clearAccessToken();
         })
-        .catch(() => clearAccessToken())
+        .catch(clearAccessToken)
         .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    else setLoading(false);
+    const h = () => setTab(location.hash.slice(1) || "dashboard");
+    window.addEventListener("hashchange", h);
+    const expired = () => {
+      clearAccessToken();
+      setUser(null);
+    };
+    window.addEventListener("admin-session-expired", expired);
+    return () => {
+      window.removeEventListener("hashchange", h);
+      window.removeEventListener("admin-session-expired", expired);
+    };
   }, []);
-
-  const handleLogout = () => {
-    clearAccessToken();
-    setUser(null);
+  const navigate = (id: string) => {
+    location.hash = id;
+    setTab(id);
+    setMobile(false);
   };
-
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-main)' }}>
-        <div style={{ color: 'var(--primary)', fontWeight: 600 }}>Loading Admin Portal...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Login onSuccess={setUser} />;
-  }
-
+  if (loading) return <div className="loading-screen">Opening your store…</div>;
+  if (!user) return <Login onSuccess={setUser} />;
   return (
     <div className="app-layout">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">M</div>
-          <div>
-            <div className="sidebar-logo-text">Meta Admin</div>
-            <div style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>Zero-Trust Portal</div>
-          </div>
+      {mobile && (
+        <button
+          className="sidebar-scrim"
+          aria-label="Close navigation"
+          onClick={() => setMobile(false)}
+        />
+      )}
+      <aside className={`sidebar ${mobile ? "is-open" : ""}`}>
+        <a href="#dashboard" className="sidebar-logo">
+          <span className="brand-mark">g.</span>
+          <span>
+            <strong>griper.</strong>
+            <small>STORE STUDIO</small>
+          </span>
+        </a>
+        <div className="store-switch">
+          <span className="store-avatar">G</span>
+          <span>
+            <strong>Griper store</strong>
+            <small>
+              <i /> Owner workspace
+            </small>
+          </span>
         </div>
-
+        <p className="nav-caption">YOUR WORKSPACE</p>
         <nav className="sidebar-nav">
-          <button className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
-            <LayoutDashboard size={18} /> Overview
-          </button>
-          <button className={`nav-item ${activeTab === 'products' ? 'active' : ''}`} onClick={() => setActiveTab('products')}>
-            <Package size={18} /> Products & Stock
-          </button>
-          <button className={`nav-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
-            <FolderTree size={18} /> Categories
-          </button>
-          <button className={`nav-item ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
-            <ShoppingCart size={18} /> Orders & Invoice
-          </button>
-          <button className={`nav-item ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}>
-            <Users size={18} /> Customers & Roles
-          </button>
-          <button className={`nav-item ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>
-            <CreditCard size={18} /> Payments & Gateways
-          </button>
-          <button className={`nav-item ${activeTab === 'promotions' ? 'active' : ''}`} onClick={() => setActiveTab('promotions')}>
-            <Tag size={18} /> Discounts & Coupons
-          </button>
-          <button className={`nav-item ${activeTab === 'banners' ? 'active' : ''}`} onClick={() => setActiveTab('banners')}>
-            <ImageIcon size={18} /> Banners & Content
-          </button>
-          <button className={`nav-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
-            <BarChart3 size={18} /> Sales Analytics
-          </button>
-          <button className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-            <SettingsIcon size={18} /> Settings & 2FA
-          </button>
+          {nav.map((n, i) => (
+            <React.Fragment key={n.id}>
+              {i === 5 && <p className="nav-caption">GROW & MANAGE</p>}
+              <button
+                className={`nav-item ${tab === n.id ? "active" : ""}`}
+                onClick={() => navigate(n.id)}
+              >
+                <n.icon size={18} />
+                {n.label}
+                {tab === n.id && (
+                  <ChevronRight size={14} style={{ marginLeft: "auto" }} />
+                )}
+              </button>
+            </React.Fragment>
+          ))}
         </nav>
-
-        <div style={{ paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)', marginBottom: 2 }}>{user.name}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>{user.email}</div>
-          <button className="btn btn-secondary" style={{ width: '100%', padding: '8px 12px', fontSize: 13 }} onClick={handleLogout}>
-            <LogOut size={14} /> Sign Out
+        <div className="sidebar-owner">
+          <span className="owner-avatar">{user.name?.[0] || "O"}</span>
+          <div>
+            <strong>{user.name}</strong>
+            <small>Store owner</small>
+          </div>
+          <button
+            className="icon-button"
+            aria-label="Sign out"
+            onClick={() => {
+              clearAccessToken();
+              setUser(null);
+            }}
+          >
+            <LogOut size={17} />
           </button>
         </div>
       </aside>
-
-      {/* Main Content Area */}
-      <main className="main-content">
-        {activeTab === 'dashboard' && <Dashboard />}
-        {activeTab === 'products' && <Products />}
-        {activeTab === 'categories' && <Categories />}
-        {activeTab === 'orders' && <Orders />}
-        {activeTab === 'customers' && <Customers />}
-        {activeTab === 'payments' && <Payments />}
-        {activeTab === 'promotions' && <Promotions />}
-        {activeTab === 'banners' && <Banners />}
-        {activeTab === 'analytics' && <Analytics />}
-      </main>
+      <div className="workspace">
+        <header className="topbar">
+          <button
+            className="icon-button mobile-menu"
+            aria-label="Open navigation"
+            onClick={() => setMobile(!mobile)}
+          >
+            <Menu size={21} />
+          </button>
+          <span>Workspace</span>
+          <ChevronRight size={13} />
+          <strong>{nav.find((n) => n.id === tab)?.label || "Overview"}</strong>
+          <div className="topbar-end">
+            <span className="owner-pill">
+              <i /> Owner access
+            </span>
+            <a
+              href="https://github.com/Rememberfrxst/N3EXPO"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Project <ArrowUpRight size={14} />
+            </a>
+          </div>
+        </header>
+        <main className="main-content">
+          {tab === "dashboard" && <Dashboard navigate={navigate} />}{" "}
+          {tab === "products" && <Products />}
+          {tab === "categories" && <Categories />}
+          {tab === "orders" && <Orders />}
+          {tab === "customers" && <Customers />}
+          {tab === "payments" && <Payments />}
+          {tab === "promotions" && <Promotions />}
+          {tab === "banners" && <Banners />}
+          {tab === "analytics" && <Analytics />}
+          {tab === "settings" && <Settings />}
+          {!nav.some((n) => n.id === tab) && <Dashboard navigate={navigate} />}
+          <footer className="workspace-footer">
+            <span>Griper Store Studio</span>
+            <span>A little better, every day.</span>
+          </footer>
+        </main>
+      </div>
     </div>
   );
 }
-

@@ -1,158 +1,230 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { FlatList, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Text } from '@/components/Text';
-import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
-import { useColors } from '@/hooks/useColors';
-import { Product } from '@/constants/data';
-import { useWishlist } from '@/context/WishlistContext';
-import SearchBarInput from '@/components/SearchBarInput';
-import ProductCard from '@/components/ProductCard';
-import { api, mapApiProduct, mapApiCategory } from '@/services/api';
-
-const SORT_OPTIONS = [
-  { key: 'relevance', label: 'Relevance' },
-  { key: 'price_asc', label: 'Price: Low to High' },
-  { key: 'price_desc', label: 'Price: High to Low' },
-  { key: 'rating', label: 'Top Rated' },
-  { key: 'discount', label: 'Biggest Discount' },
-];
-
-export default function SearchScreen() {
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const { toggle, isInWishlist } = useWishlist();
-  const isWeb = Platform.OS === 'web';
-  const topPad = isWeb ? 67 : insets.top;
-
-  const [query, setQuery] = useState('');
-  const [sortBy, setSortBy] = useState('relevance');
-  const [selectedCat, setSelectedCat] = useState('');
-  
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-
+import CategoryThumbnail from "@/components/CategoryThumbnail";
+import React, { useCallback, useEffect, useState } from "react";
+import { View, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Text } from "@/components/Text";
+import { Icon, SearchField, ProductGrid, LoadState } from "@/components/ShopUI";
+import { useColors } from "@/hooks/useColors";
+import { api, ApiCategory, mapApiProduct } from "@/services/api";
+import { Product } from "@/constants/data";
+export default function Categories() {
+  const c = useColors(),
+    insets = useSafeAreaInsets(),
+    params = useLocalSearchParams<{ q?: string; sort?: string }>();
+  const [cats, setCats] = useState<ApiCategory[]>([]),
+    [active, setActive] = useState(""),
+    [query, setQuery] = useState(params.q || ""),
+    [sort, setSort] = useState(params.sort || "newest"),
+    [items, setItems] = useState<Product[]>([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(false),
+    [page, setPage] = useState(1),
+    [hasMore, setHasMore] = useState(false),
+    [retry, setRetry] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      api.categories
+        .list()
+        .then(setCats)
+        .catch(() => setError(true));
+    }, []),
+  );
   useEffect(() => {
-    api.products.list({ limit: 100 }).then(r => setAllProducts(r.data.map(mapApiProduct))).catch(console.error);
-    api.categories.list().then(cats => setCategories(cats.map(mapApiCategory))).catch(console.error);
-  }, []);
-
-  const filtered = useMemo(() => {
-    let results = [...allProducts];
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      results = results.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.seller.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q) ||
-        p.tags.some(t => t.includes(q))
-      );
-    }
-    if (selectedCat) {
-      results = results.filter(p => p.category === selectedCat);
-    }
-    switch (sortBy) {
-      case 'price_asc': results.sort((a, b) => a.price - b.price); break;
-      case 'price_desc': results.sort((a, b) => b.price - a.price); break;
-      case 'rating': results.sort((a, b) => b.rating - a.rating); break;
-      case 'discount': results.sort((a, b) => b.discount - a.discount); break;
-    }
-    return results;
-  }, [query, sortBy, selectedCat, allProducts]);
-
+    setPage(1);
+  }, [query, active, sort]);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(false);
+    const t = setTimeout(() => {
+      api.products
+        .list({ q: query, category: active, sort, page, limit: 20 })
+        .then((p) => {
+          if (alive) {
+            setItems((prev) =>
+              page === 1
+                ? p.data.map(mapApiProduct)
+                : [...prev, ...p.data.map(mapApiProduct)],
+            );
+            setHasMore(p.data.length === 20);
+          }
+        })
+        .catch(() => {
+          if (alive) setError(true);
+        })
+        .finally(() => {
+          if (alive) setLoading(false);
+        });
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [query, active, sort, page, retry]);
+  const selected = cats.find((cat) => cat.id === active);
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: colors.card, borderBottomColor: colors.border, borderBottomWidth: 1 }]}>
-        <SearchBarInput
+    <View
+      testID="category-screen"
+      style={{
+        flex: 1,
+        backgroundColor: c.background,
+        paddingTop: insets.top + 18,
+      }}
+    >
+      <View style={{ paddingHorizontal: 20, paddingBottom: 18 }}>
+        <Text style={[s.eyebrow, { color: c.primary }]}>
+          FIND YOUR EVERYDAY
+        </Text>
+        <Text style={[s.heading, { color: c.foreground }]}>Category</Text>
+        <SearchField
           value={query}
           onChangeText={setQuery}
-          onClear={() => setQuery('')}
-          placeholder="Search products, brands & more"
-          autoFocus={false}
-        />
-        {/* Sort chips */}
-        <FlatList
-          data={SORT_OPTIONS}
-          keyExtractor={i => i.key}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.sortList}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.chip, { backgroundColor: sortBy === item.key ? colors.primary : colors.muted, borderColor: sortBy === item.key ? colors.primary : colors.border }]}
-              onPress={() => setSortBy(item.key)}
-            >
-              <Text style={[styles.chipText, { color: sortBy === item.key ? colors.primaryForeground : colors.foreground }]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
-        {/* Category filter */}
-        <FlatList
-          data={[{ id: '', name: 'All', slug: '', icon: '', color: '', color2: '' }, ...categories]}
-          keyExtractor={i => i.id || 'all'}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.sortList}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.catChip, { backgroundColor: selectedCat === item.slug ? colors.accent : colors.secondary, borderColor: selectedCat === item.slug ? colors.accent : colors.border }]}
-              onPress={() => setSelectedCat(selectedCat === item.slug ? '' : item.slug)}
-            >
-              <Text style={[styles.chipText, { color: selectedCat === item.slug ? '#fff' : colors.foreground }]}>
-                {item.name}
-              </Text>
-            </TouchableOpacity>
-          )}
+          placeholder="Search products, brands and more"
         />
       </View>
+      <View
+        style={{
+          flex: 1,
+          flexDirection: "row",
+          borderTopWidth: 1,
+          borderColor: c.border,
+        }}
+      >
+        <ScrollView
+          style={{ width: 86, maxWidth: 86, backgroundColor: c.card }}
+          contentContainerStyle={{ paddingBottom: 105 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {[{ id: "", name: "All finds" }, ...cats].map((cat, i) => (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={{ selected: active === cat.id }}
+              key={cat.id}
+              onPress={() => setActive(cat.id)}
+              style={[
+                s.cat,
+                {
+                  backgroundColor: active === cat.id ? c.secondary : c.card,
+                  borderLeftColor:
+                    active === cat.id ? c.primary : "transparent",
+                },
+              ]}
+            >
+              {cat.id ? (
+                <CategoryThumbnail category={cat as ApiCategory} size={39} />
+              ) : (
+                <Icon
+                  name="grid-outline"
+                  size={26}
+                  color={active === cat.id ? c.primary : c.mutedForeground}
+                />
+              )}
 
-      {/* Results */}
-      <FlatList
-        data={filtered}
-        keyExtractor={p => p.id}
-        numColumns={2}
-        contentContainerStyle={[styles.grid, { paddingBottom: isWeb ? 100 : 120 }]}
-        columnWrapperStyle={styles.row}
-        ListHeaderComponent={
-          <Text style={[styles.resultCount, { color: colors.mutedForeground }]}>
-            {filtered.length} {filtered.length === 1 ? 'result' : 'results'}
-          </Text>
-        }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No products found</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>Try different keywords or filters</Text>
+              <Text
+                numberOfLines={2}
+                style={{
+                  color: active === cat.id ? c.primary : c.mutedForeground,
+                  fontSize: 10,
+                  textAlign: "center",
+                  fontFamily: "GoogleSans_500Medium",
+                }}
+              >
+                {cat.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 14, paddingBottom: 110 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={s.listHead}>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: c.foreground,
+                  fontSize: 18,
+                  fontFamily: "GoogleSans_700Bold",
+                }}
+              >
+                {selected?.name || "All finds"}
+              </Text>
+              <Text
+                style={{ color: c.mutedForeground, fontSize: 10, marginTop: 3 }}
+              >
+                {query
+                  ? `Results for “${query}”`
+                  : "Explore something you’ll love"}
+              </Text>
+            </View>
+            <TouchableOpacity
+              accessibilityLabel="Change product sort order"
+              onPress={() =>
+                setSort(
+                  sort === "newest"
+                    ? "price_asc"
+                    : sort === "price_asc"
+                      ? "price_desc"
+                      : "newest",
+                )
+              }
+              style={{ padding: 7 }}
+            >
+              <Icon name="swap-vertical-outline" color={c.primary} size={20} />
+            </TouchableOpacity>
           </View>
-        }
-        renderItem={({ item }) => (
-          <ProductCard
-            product={item}
-            onPress={() => router.push(`/product/${item.id}`)}
-            isWishlisted={isInWishlist(item.id)}
-            onWishlistToggle={() => { toggle(item); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-            style={{ flex: 1 }}
-          />
-        )}
-      />
+          <Text
+            style={{ fontSize: 10, color: c.mutedForeground, marginBottom: 12 }}
+          >
+            {sort === "price_asc"
+              ? "Price: low to high"
+              : sort === "price_desc"
+                ? "Price: high to low"
+                : "Newest arrivals"}
+          </Text>
+          {error ? (
+            <LoadState error="load" retry={() => setRetry((n) => n + 1)} />
+          ) : loading && page === 1 ? (
+            <LoadState loading />
+          ) : items.length ? (
+            <>
+              <ProductGrid products={items} />
+              {hasMore && (
+                <TouchableOpacity
+                  disabled={loading}
+                  onPress={() => setPage((p) => p + 1)}
+                  style={{ padding: 18, alignItems: "center" }}
+                >
+                  <Text style={{ color: c.primary }}>
+                    {loading ? "Loading…" : "Load more finds"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <LoadState empty="No products found. Try another search." />
+          )}
+        </ScrollView>
+      </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingBottom: 10, gap: 10 },
-  sortList: { gap: 8, paddingVertical: 4 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
-  catChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
-  chipText: { fontSize: 12, fontFamily: 'GoogleSans_500Medium' },
-  grid: { padding: 12, gap: 10 },
-  row: { gap: 10 },
-  resultCount: { fontSize: 13, fontFamily: 'GoogleSans_400Regular', marginBottom: 10 },
-  empty: { alignItems: 'center', paddingTop: 60, gap: 8 },
-  emptyTitle: { fontSize: 18, fontFamily: 'GoogleSans_600SemiBold' },
-  emptySubtitle: { fontSize: 14, fontFamily: 'GoogleSans_400Regular' },
+const s = StyleSheet.create({
+  eyebrow: { fontSize: 9, letterSpacing: 1.5, marginBottom: 4 },
+  heading: {
+    fontSize: 31,
+    fontFamily: "GoogleSans_700Bold",
+    letterSpacing: -1,
+    marginBottom: 18,
+  },
+  cat: {
+    paddingVertical: 18,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    gap: 9,
+    borderLeftWidth: 3,
+  },
+  listHead: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
 });

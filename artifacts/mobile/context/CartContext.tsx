@@ -1,8 +1,15 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { COUPONS, Order, Product } from '@/constants/data';
-import { api, ApiCartItem, mapApiProduct } from '@/services/api';
-import { useAuth } from '@/context/AuthContext';
+import { useStorefront } from "@/hooks/useStorefront";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import { Order, Product } from "@/constants/data";
+import { api, ApiCartItem, mapApiProduct } from "@/services/api";
+import { useAuth } from "@/context/AuthContext";
 
 export interface CartItem {
   product: Product;
@@ -12,13 +19,16 @@ export interface CartItem {
 
 interface CartContextType {
   items: CartItem[];
-  addItem: (product: Product) => void;
+  addItem: (product: Product) => Promise<void>;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, qty: number) => void;
   clearCart: () => void;
   coupon: string;
   couponDiscount: number;
-  applyCoupon: (code: string) => Promise<'valid' | 'invalid' | 'already'> | 'valid' | 'invalid' | 'already';
+  applyCoupon: (
+    code: string,
+  ) =>
+    Promise<"valid" | "invalid" | "already"> | "valid" | "invalid" | "already";
   removeCoupon: () => void;
   subtotal: number;
   deliveryFee: number;
@@ -26,7 +36,10 @@ interface CartContextType {
   total: number;
   itemCount: number;
   orders: Order[];
-  placeOrder: (paymentMethod: Order['paymentMethod'], address: Order['address']) => Promise<Order> | Order;
+  placeOrder: (
+    paymentMethod: Order["paymentMethod"],
+    address: Order["address"],
+  ) => Promise<Order> | Order;
 }
 
 function mapCartItem(item: ApiCartItem): CartItem & { cartItemId: string } {
@@ -42,37 +55,49 @@ function mapApiOrder(o: any): Order {
     id: o.id,
     items: (o.items ?? []).map((i: any) => ({
       productId: i.productId,
-      name: i.product?.name ?? '',
+      name: i.product?.name ?? "",
       price: parseFloat(i.unitPrice) || 0,
       quantity: i.quantity,
-      image: i.product?.images?.[0]?.url ?? '',
+      image: i.product?.images?.[0]?.url ?? "",
     })),
     total: parseFloat(o.total) || 0,
     status: o.status,
     date: o.createdAt,
-    estimatedDelivery: o.estimatedDelivery ?? '',
+    estimatedDelivery: o.estimatedDelivery ?? "",
     paymentMethod: o.paymentMethod as any,
-    address: o.address ? {
-      id: o.address.id,
-      name: '',
-      line1: o.address.line1,
-      city: o.address.city,
-      state: o.address.state,
-      pincode: o.address.pincode,
-      phone: '',
-      isDefault: false,
-    } : { id: '', name: '', line1: '', city: '', state: '', pincode: '', phone: '', isDefault: false },
+    address: o.address
+      ? {
+          id: o.address.id,
+          name: "",
+          line1: o.address.line1,
+          city: o.address.city,
+          state: o.address.state,
+          pincode: o.address.pincode,
+          phone: "",
+          isDefault: false,
+        }
+      : {
+          id: "",
+          name: "",
+          line1: "",
+          city: "",
+          state: "",
+          pincode: "",
+          phone: "",
+          isDefault: false,
+        },
   };
 }
 
 const CartContext = createContext<CartContextType | null>(null);
-const CART_KEY = '@griper_cart';
-const ORDERS_KEY = '@griper_orders';
+const CART_KEY = "@griper_cart";
+const ORDERS_KEY = "@griper_orders";
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const store = useStorefront();
   const [items, setItems] = useState<CartItem[]>([]);
-  const [coupon, setCoupon] = useState('');
+  const [coupon, setCoupon] = useState("");
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [orders, setOrders] = useState<Order[]>([]);
 
@@ -80,13 +105,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const load = async () => {
       try {
         if (user) {
+          const guestData = await AsyncStorage.getItem(CART_KEY);
+          if (guestData) {
+            const guestItems = JSON.parse(guestData) as CartItem[];
+            for (const item of guestItems)
+              await api.cart.add(item.product.id, item.quantity);
+            await AsyncStorage.removeItem(CART_KEY);
+          }
           const apiCart = await api.cart.get();
           if (apiCart && apiCart.items) {
             setItems(apiCart.items.map(mapCartItem));
             if ((apiCart as any).couponCode) {
               setCoupon((apiCart as any).couponCode);
-              const pct = COUPONS[String((apiCart as any).couponCode).toUpperCase()] || 10;
-              setCouponDiscount(pct);
+              setCouponDiscount(0);
             }
           } else {
             setItems([]);
@@ -95,9 +126,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           setOrders(apiOrders.map(mapApiOrder));
         } else {
           const cartData = await AsyncStorage.getItem(CART_KEY);
-          if (cartData) setItems(JSON.parse(cartData) as CartItem[]);
+          setItems(cartData ? (JSON.parse(cartData) as CartItem[]) : []);
           const ordersData = await AsyncStorage.getItem(ORDERS_KEY);
-          if (ordersData) setOrders(JSON.parse(ordersData) as Order[]);
+          setOrders(ordersData ? (JSON.parse(ordersData) as Order[]) : []);
         }
       } catch (err) {
         console.error(err);
@@ -127,69 +158,79 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   };
 
-  const addItem = useCallback(async (product: Product) => {
-    setItems(prev => {
-      const existing = prev.find(i => i.product.id === product.id);
-      const updated = existing
-        ? prev.map(i => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i)
-        : [...prev, { product, quantity: 1 }];
-      if (!user) saveCart(updated);
-      return updated;
-    });
-
-    if (user) {
-      try {
+  const addItem = useCallback(
+    async (product: Product) => {
+      if (product.stock < 1) throw new Error("This product is out of stock");
+      if (user) {
         await api.cart.add(product.id, 1);
-        await loadCartFromApi();
-      } catch (error) {
-        console.error('Failed to add to cart:', error);
+        const result = await api.cart.get();
+        setItems(result.items.map(mapCartItem));
+      } else {
+        setItems((prev) => {
+          const existing = prev.find((i) => i.product.id === product.id);
+          if ((existing?.quantity || 0) >= product.stock) return prev;
+          const updated = existing
+            ? prev.map((i) =>
+                i.product.id === product.id
+                  ? { ...i, quantity: i.quantity + 1 }
+                  : i,
+              )
+            : [...prev, { product, quantity: 1 }];
+          void saveCart(updated);
+          return updated;
+        });
       }
-    }
-  }, [user]);
+    },
+    [user],
+  );
 
-  const removeItem = useCallback(async (productId: string) => {
-    let cartItemToRemove: CartItem | undefined;
-    setItems(prev => {
-      cartItemToRemove = prev.find(i => i.product.id === productId);
-      const updated = prev.filter(i => i.product.id !== productId);
-      if (!user) saveCart(updated);
-      return updated;
-    });
-
-    if (user && cartItemToRemove?.cartItemId) {
-      try {
-        await api.cart.remove(cartItemToRemove.cartItemId);
-        await loadCartFromApi();
-      } catch (error) {
-        console.error('Failed to remove item:', error);
+  const removeItem = useCallback(
+    async (productId: string) => {
+      const current = items.find((i) => i.product.id === productId);
+      if (user && current?.cartItemId) {
+        try {
+          await api.cart.remove(current.cartItemId);
+          await loadCartFromApi();
+        } catch (e) {
+          console.error("Could not remove item", e);
+        }
+      } else {
+        const updated = items.filter((i) => i.product.id !== productId);
+        setItems(updated);
+        await saveCart(updated);
       }
-    }
-  }, [user]);
-
-  const updateQuantity = useCallback(async (productId: string, qty: number) => {
-    if (qty <= 0) { removeItem(productId); return; }
-    let cartItemToUpdate: CartItem | undefined;
-    
-    setItems(prev => {
-      cartItemToUpdate = prev.find(i => i.product.id === productId);
-      const updated = prev.map(i => i.product.id === productId ? { ...i, quantity: qty } : i);
-      if (!user) saveCart(updated);
-      return updated;
-    });
-
-    if (user && cartItemToUpdate?.cartItemId) {
-      try {
-        await api.cart.update(cartItemToUpdate.cartItemId, qty);
-        await loadCartFromApi();
-      } catch (error) {
-        console.error('Failed to update quantity:', error);
+    },
+    [user, items],
+  );
+  const updateQuantity = useCallback(
+    async (productId: string, qty: number) => {
+      if (qty < 1) {
+        await removeItem(productId);
+        return;
       }
-    }
-  }, [user, removeItem]);
+      const current = items.find((i) => i.product.id === productId);
+      if (!current || qty > current.product.stock) return;
+      if (user && current.cartItemId) {
+        try {
+          await api.cart.update(current.cartItemId, qty);
+          await loadCartFromApi();
+        } catch (e) {
+          console.error("Could not change quantity", e);
+        }
+      } else {
+        const updated = items.map((i) =>
+          i.product.id === productId ? { ...i, quantity: qty } : i,
+        );
+        setItems(updated);
+        await saveCart(updated);
+      }
+    },
+    [user, items, removeItem],
+  );
 
   const clearCart = useCallback(async () => {
     setItems([]);
-    setCoupon('');
+    setCoupon("");
     setCouponDiscount(0);
     if (!user) {
       AsyncStorage.removeItem(CART_KEY);
@@ -202,89 +243,105 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  const applyCoupon = useCallback(async (code: string) => {
-    if (coupon) return 'already' as const;
-    if (user) {
+  const applyCoupon = useCallback(
+    async (code: string) => {
+      if (coupon) return "already" as const;
+      if (!user) return "invalid" as const;
       try {
-        const res = await api.cart.applyCoupon(code);
-        if (res.discount !== undefined || res.code) {
-          setCoupon(code.toUpperCase());
-          const pct = COUPONS[code.toUpperCase()] || 10;
-          setCouponDiscount(pct);
-          return 'valid' as const;
-        }
-      } catch (err) {
-        return 'invalid' as const;
+        const result = await api.cart.applyCoupon(code);
+        setCoupon(result.code);
+        setCouponDiscount(result.discount);
+        return "valid" as const;
+      } catch {
+        return "invalid" as const;
       }
-      return 'invalid' as const;
-    } else {
-      const pct = COUPONS[code.toUpperCase()];
-      if (!pct) return 'invalid' as const;
-      setCoupon(code.toUpperCase());
-      setCouponDiscount(pct);
-      return 'valid' as const;
-    }
-  }, [coupon, user]);
+    },
+    [coupon, user],
+  );
 
   const removeCoupon = useCallback(() => {
-    setCoupon('');
+    setCoupon("");
     setCouponDiscount(0);
   }, []);
 
-  const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
-  const deliveryFee = subtotal >= 499 ? 0 : 40;
-  const discountAmount = Math.round(subtotal * couponDiscount / 100);
+  const subtotal = items.reduce(
+    (sum, i) => sum + i.product.price * i.quantity,
+    0,
+  );
+  const deliveryFee =
+    subtotal === 0 || subtotal >= store.freeShippingThreshold
+      ? 0
+      : store.deliveryFee;
+  const discountAmount = Math.min(subtotal, couponDiscount);
   const total = subtotal + deliveryFee - discountAmount;
+  useEffect(() => {
+    if (!coupon || !user) return;
+    let active = true;
+    api.cart
+      .applyCoupon(coupon)
+      .then((r) => {
+        if (active) setCouponDiscount(r.discount);
+      })
+      .catch(() => {
+        if (active) {
+          setCoupon("");
+          setCouponDiscount(0);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [coupon, subtotal, user]);
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
-  const placeOrder = useCallback(async (paymentMethod: Order['paymentMethod'], address: Order['address']) => {
-    if (user) {
-      try {
-        const res = await api.orders.place(address.id, paymentMethod, coupon || undefined);
-        const newOrder = mapApiOrder(res);
-        setOrders(prev => [newOrder, ...prev]);
-        clearCart();
-        return newOrder;
-      } catch (err) {
-        console.error('Failed to place order:', err);
-        throw err;
+  const placeOrder = useCallback(
+    async (
+      paymentMethod: Order["paymentMethod"],
+      address: Order["address"],
+    ) => {
+      if (user) {
+        try {
+          const res = await api.orders.place(
+            address.id,
+            paymentMethod,
+            coupon || undefined,
+          );
+          const newOrder = mapApiOrder(res);
+          setOrders((prev) => [newOrder, ...prev]);
+          clearCart();
+          return newOrder;
+        } catch (err) {
+          console.error("Failed to place order:", err);
+          throw err;
+        }
+      } else {
+        throw new Error("Please sign in to place an order");
       }
-    } else {
-      const now = new Date();
-      const estimated = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-      const order: Order = {
-        id: 'ORD' + Date.now().toString().slice(-8),
-        items: items.map(i => ({
-          productId: i.product.id,
-          name: i.product.name,
-          price: i.product.price,
-          quantity: i.quantity,
-          image: i.product.image,
-        })),
-        total,
-        status: paymentMethod === 'cod' ? 'confirmed' : 'confirmed',
-        date: now.toISOString(),
-        estimatedDelivery: estimated.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-        paymentMethod,
-        address,
-      };
-      setOrders(prev => {
-        const updated = [order, ...prev];
-        saveOrders(updated);
-        return updated;
-      });
-      clearCart();
-      return order;
-    }
-  }, [items, total, clearCart, user, coupon]);
+    },
+    [items, total, clearCart, user, coupon],
+  );
 
   return (
-    <CartContext.Provider value={{
-      items, addItem, removeItem, updateQuantity, clearCart,
-      coupon, couponDiscount, applyCoupon, removeCoupon,
-      subtotal, deliveryFee, discountAmount, total, itemCount,
-      orders, placeOrder,
-    }}>
+    <CartContext.Provider
+      value={{
+        items,
+        addItem,
+        removeItem,
+        updateQuantity,
+        clearCart,
+        coupon,
+        couponDiscount,
+        applyCoupon,
+        removeCoupon,
+        subtotal,
+        deliveryFee,
+        discountAmount,
+        total,
+        itemCount,
+        orders,
+        placeOrder,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );
@@ -292,6 +349,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
 export function useCart() {
   const ctx = useContext(CartContext);
-  if (!ctx) throw new Error('useCart must be used within CartProvider');
+  if (!ctx) throw new Error("useCart must be used within CartProvider");
   return ctx;
 }

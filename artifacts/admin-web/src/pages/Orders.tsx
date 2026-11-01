@@ -1,180 +1,244 @@
-import React, { useEffect, useState } from 'react';
-import { adminApi } from '../lib/api';
-import { Package, Truck, CheckCircle2, XCircle, Clock, Printer, Eye, X } from 'lucide-react';
-
+import React, { useEffect, useState } from "react";
+import { Eye, X, Printer, ShoppingBag } from "lucide-react";
+import { adminApi } from "../lib/api";
+const statuses = [
+  "pending",
+  "confirmed",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "returned",
+];
+const money = (v: any) => `₹${Number(v || 0).toLocaleString("en-IN")}`;
 export function Orders() {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
-  const [showInvoice, setShowInvoice] = useState(false);
-
-  const fetchOrders = () => {
+  const [orders, setOrders] = useState<any[]>([]),
+    [loading, setLoading] = useState(true),
+    [filter, setFilter] = useState("all"),
+    [selected, setSelected] = useState<any>(null),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  const load = () => {
     setLoading(true);
-    adminApi.orders.list()
+    adminApi.orders
+      .list()
       .then(setOrders)
-      .catch(console.error)
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   };
-
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  const handleUpdateStatus = async (id: string, newStatus: string) => {
+  useEffect(load, []);
+  const update = async (id: string, status: string, paymentStatus?: string) => {
+    setBusy(true);
+    setError("");
     try {
-      await adminApi.orders.updateStatus(id, newStatus);
-      fetchOrders();
-      if (selectedOrder?.id === id) {
-        setSelectedOrder((prev: any) => ({ ...prev, status: newStatus }));
-      }
-    } catch (err: any) {
-      alert('Failed to update status: ' + err.message);
+      await adminApi.orders.updateStatus(id, status, paymentStatus);
+      load();
+      if (selected?.id === id) setSelected(await adminApi.orders.get(id));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
     }
   };
-
-  const handleViewDetails = async (id: string) => {
+  const view = async (id: string) => {
     try {
-      const details = await adminApi.orders.get(id);
-      setSelectedOrder(details);
-    } catch (err: any) {
-      alert('Error fetching order details: ' + err.message);
+      setSelected(await adminApi.orders.get(id));
+    } catch (e: any) {
+      setError(e.message);
     }
   };
-
-  const filteredOrders = statusFilter === 'all'
-    ? orders
-    : orders.filter(o => o.status === statusFilter);
-
+  const list = orders.filter((o) => filter === "all" || o.status === filter);
   return (
     <div>
       <div className="header">
         <div>
-          <h1 className="page-title">Order Management</h1>
-          <p className="page-subtitle">Track, fulfill, update status & print customer invoices</p>
+          <p className="eyebrow">A LITTLE CARE, EVERY STEP</p>
+          <h1 className="page-title">Orders</h1>
+          <p className="page-subtitle">
+            From your store to their doorstep. Keep every order moving.
+          </p>
         </div>
       </div>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {['all', 'pending', 'confirmed', 'shipped', 'delivered', 'cancelled'].map(st => (
-          <button
-            key={st}
-            onClick={() => setStatusFilter(st)}
-            className={`btn ${statusFilter === st ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ textTransform: 'capitalize', padding: '6px 16px', fontSize: 13 }}
-          >
-            {st}
-          </button>
-        ))}
-      </div>
-
+      {error && (
+        <div role="alert" className="error">
+          {error}
+        </div>
+      )}
       <div className="card-table">
-        <div className="table-header">
-          <h3 style={{ fontSize: 16, fontWeight: 700 }}>Orders List ({filteredOrders.length})</h3>
+        <div className="resource-toolbar">
+          <div className="tabs" style={{ flexWrap: "wrap" }}>
+            {["all", ...statuses].map((s) => (
+              <button
+                className={filter === s ? "selected" : ""}
+                key={s}
+                onClick={() => setFilter(s)}
+              >
+                {s[0].toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
-
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center' }}>Loading customer orders...</div>
+          <div className="empty-state">Loading orders…</div>
+        ) : !list.length ? (
+          <div className="empty-state">
+            <ShoppingBag size={30} />
+            <h3>All quiet for now.</h3>
+            <p>Orders in this view will appear here.</p>
+          </div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Order #</th>
-                <th>Customer</th>
-                <th>Payment</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredOrders.map(o => (
-                <tr key={o.id}>
-                  <td style={{ fontWeight: 700 }}>#{o.orderNumber || o.id.slice(0, 8)}</td>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{o.customerName || 'Customer'}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{o.customerEmail}</div>
-                  </td>
-                  <td>
-                    <span className={`badge ${o.paymentStatus === 'paid' ? 'badge-success' : 'badge-warning'}`}>
-                      {o.paymentStatus || 'pending'} ({o.paymentMethod || 'COD'})
-                    </span>
-                  </td>
-                  <td style={{ fontWeight: 700 }}>₹{parseFloat(o.total || '0').toLocaleString('en-IN')}</td>
-                  <td>
-                    <select
-                      className="form-select"
-                      value={o.status || 'pending'}
-                      onChange={e => handleUpdateStatus(o.id, e.target.value)}
-                      style={{ padding: '4px 8px', fontSize: 12 }}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="shipped">Shipped</option>
-                      <option value="delivered">Delivered</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => handleViewDetails(o.id)}>
-                      <Eye size={14} /> View
-                    </button>
-                  </td>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Customer</th>
+                  <th>Payment</th>
+                  <th>Total</th>
+                  <th>Fulfillment</th>
+                  <th>Details</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {list.map((o) => (
+                  <tr key={o.id}>
+                    <td>
+                      <strong>#{o.orderNumber}</strong>
+                      <small>
+                        {new Date(o.createdAt).toLocaleDateString("en-IN")}
+                      </small>
+                    </td>
+                    <td>
+                      <strong>{o.customerName}</strong>
+                      <small>{o.customerEmail}</small>
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${o.paymentStatus === "paid" ? "badge-success" : "badge-warning"}`}
+                      >
+                        {o.paymentStatus}
+                      </span>
+                      <small>{o.paymentMethod?.toUpperCase()}</small>
+                    </td>
+                    <td>{money(o.total)}</td>
+                    <td>
+                      <select
+                        aria-label={`Status for order ${o.orderNumber}`}
+                        className="form-select"
+                        disabled={busy}
+                        value={o.status}
+                        onChange={(e) => update(o.id, e.target.value)}
+                      >
+                        {statuses.map((s) => (
+                          <option value={s} key={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => view(o.id)}
+                      >
+                        <Eye size={14} /> View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
-
-      {/* Order Details Drawer / Modal */}
-      {selectedOrder && (
+      {selected && (
         <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: 700 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="order-title"
+          >
+            <div className="modal-heading">
               <div>
-                <h2 style={{ fontSize: 20, fontWeight: 700 }}>Order #{selectedOrder.orderNumber || selectedOrder.id.slice(0, 8)}</h2>
-                <span className="badge badge-primary" style={{ marginTop: 4 }}>{selectedOrder.status}</span>
+                <p className="eyebrow">ORDER DETAILS</p>
+                <h2 id="order-title">#{selected.orderNumber}</h2>
               </div>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setSelectedOrder(null)}>
+              <button
+                className="icon-button"
+                aria-label="Close order"
+                onClick={() => setSelected(null)}
+              >
                 <X size={20} />
               </button>
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20, fontSize: 13 }}>
-              <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-main)', border: '1px solid var(--border)' }}>
-                <div style={{ fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>Customer Details</div>
-                <div>ID: {selectedOrder.userId}</div>
-                <div>Payment Method: {selectedOrder.paymentMethod || 'COD'}</div>
-                <div>Payment Status: {selectedOrder.paymentStatus}</div>
+            <span className="badge badge-primary">{selected.status}</span>
+            <div className="order-summary">
+              <div>
+                <small>PAYMENT</small>
+                {selected.paymentMethod?.toUpperCase()} ·{" "}
+                {selected.paymentStatus}
+                <br />
+                {selected.paymentMethod === "cod" &&
+                  selected.paymentStatus !== "paid" && (
+                    <button
+                      className="text-button"
+                      disabled={busy}
+                      onClick={() =>
+                        update(selected.id, selected.status, "paid")
+                      }
+                    >
+                      Mark cash collected
+                    </button>
+                  )}
               </div>
-              <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-main)', border: '1px solid var(--border)' }}>
-                <div style={{ fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>Shiprocket & Fulfillment</div>
-                <div>Tracking ID: SR-{selectedOrder.id.slice(0, 8).toUpperCase()}</div>
-                <div>Courier Status: Active Sync</div>
+              <div>
+                <small>PLACED ON</small>
+                {new Date(selected.createdAt).toLocaleString("en-IN")}
+                {selected.deliveredAt && (
+                  <small>
+                    Delivered{" "}
+                    {new Date(selected.deliveredAt).toLocaleDateString("en-IN")}
+                  </small>
+                )}
               </div>
             </div>
-
-            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Ordered Items</h3>
-            <div style={{ marginBottom: 20 }}>
-              {(selectedOrder.items || []).map((item: any) => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)', fontSize: 14 }}>
+            <div className="detail-items">
+              {selected.items.map((i: any) => (
+                <div className="detail-item" key={i.id}>
                   <div>
-                    <div style={{ fontWeight: 600 }}>Product ID: {item.productId.slice(0, 8)}...</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Qty: {item.quantity} × ₹{item.unitPrice}</div>
+                    <strong>{i.name || "Product"}</strong>
+                    <small>
+                      {i.quantity} × {money(i.unitPrice)}
+                    </small>
                   </div>
-                  <div style={{ fontWeight: 700 }}>₹{item.totalPrice}</div>
+                  <strong>{money(i.totalPrice)}</strong>
                 </div>
               ))}
             </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+            <div className="invoice-totals">
               <div>
-                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Total Amount: </span>
-                <span style={{ fontSize: 20, fontWeight: 800 }}>₹{selectedOrder.total}</span>
+                <span>Subtotal</span>
+                <span>{money(selected.subtotal)}</span>
               </div>
-              <button className="btn btn-secondary" onClick={() => window.print()}>
-                <Printer size={16} /> Print Invoice
+              <div>
+                <span>Delivery</span>
+                <span>{money(selected.shippingFee)}</span>
+              </div>
+              <div>
+                <span>Discount</span>
+                <span>−{money(selected.discount)}</span>
+              </div>
+              <div style={{ fontSize: 20, marginTop: 15 }}>
+                <strong>Total</strong>
+                <strong>{money(selected.total)}</strong>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={() => window.print()}
+              >
+                <Printer size={15} /> Print order
               </button>
             </div>
           </div>

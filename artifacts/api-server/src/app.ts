@@ -16,7 +16,7 @@ app.use(helmet());
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 100,
-  message: { error: 'Too many requests, please try again later.' },
+  message: { error: "Too many requests, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -24,7 +24,9 @@ const globalLimiter = rateLimit({
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 15,
-  message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
+  message: {
+    error: "Too many login attempts. Please try again after 15 minutes.",
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -32,17 +34,18 @@ const authLimiter = rateLimit({
 const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 30,
-  message: { error: 'Upload rate limit exceeded.' },
+  message: { error: "Upload rate limit exceeded." },
 });
 
 const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20,
-  message: { error: 'Payment action rate limit exceeded.' },
+  message: { error: "Payment action rate limit exceeded." },
 });
 
 app.use(globalLimiter);
 app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/admin-login", authLimiter);
 app.use("/api/auth/admin-login-2fa", authLimiter);
 app.use("/api/uploads", uploadLimiter);
 app.use("/api/payments", paymentLimiter);
@@ -67,12 +70,23 @@ app.use(
   }),
 );
 
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
-  credentials: true,
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(
+  cors({
+    origin: process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(",")
+      : "*",
+    credentials: true,
+  }),
+);
+app.use(
+  express.json({
+    limit: "10mb",
+    verify: (req, _res, buf) => {
+      (req as any).rawBody = buf.toString();
+    },
+  }),
+);
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use("/api", router);
 

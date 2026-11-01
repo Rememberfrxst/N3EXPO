@@ -1,12 +1,10 @@
-import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Image } from 'expo-image';
-import { Text } from '@/components/Text';
-import Svg, { Path } from 'react-native-svg';
-import { useColors } from '@/hooks/useColors';
-import { Product, formatPrice } from '@/constants/data';
-import RatingStars from './RatingStars';
-
+import React from "react";
+import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { Image } from "expo-image";
+import { Text } from "@/components/Text";
+import { Icon } from "@/components/StoreIcon";
+import { useColors } from "@/hooks/useColors";
+import { Product, formatPrice } from "@/constants/data";
 interface Props {
   product: Product;
   onPress: () => void;
@@ -14,131 +12,162 @@ interface Props {
   onWishlistToggle?: () => void;
   style?: object;
 }
-
-/* FA plus icon — add to wishlist / quick-add */
-function PlusBtn({ onPress }: { onPress: () => void }) {
+export default function ProductCard({
+  product: p,
+  onPress,
+  isWishlisted,
+  onWishlistToggle,
+  style,
+}: Props) {
+  const c = useColors();
   return (
-    <TouchableOpacity
-      style={styles.wishBtn}
-      onPress={onPress}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    <View
+      style={[
+        s.card,
+        { backgroundColor: c.card, borderColor: c.border },
+        style,
+      ]}
     >
-      <Svg width={14} height={14} viewBox="0 0 640 640">
-        <Path
-          fill="#fff"
-          d="M352 128C352 110.3 337.7 96 320 96C302.3 96 288 110.3 288 128L288 288L128 288C110.3 288 96 302.3 96 320C96 337.7 110.3 352 128 352L288 352L288 512C288 529.7 302.3 544 320 544C337.7 544 352 529.7 352 512L352 352L512 352C529.7 352 544 337.7 544 320C544 302.3 529.7 288 512 288L352 288L352 128z"
-        />
-      </Svg>
-    </TouchableOpacity>
-  );
-}
-
-export default function ProductCard({ product, onPress, isWishlisted = false, onWishlistToggle, style }: Props) {
-  const colors = useColors();
-
-  return (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card }, style]}
-      onPress={onPress}
-      activeOpacity={0.92}
-    >
-      {/* Image area */}
-      <Image source={product.image} style={styles.image} contentFit="cover" transition={200} />
-
-      {/* Info section */}
-      <View style={styles.info}>
-
-        {/* Discount badge — Amazon-style, top of info */}
-        {product.discount > 0 && (
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>{product.discount}% off</Text>
-          </View>
-        )}
-
-        <Text style={[styles.name, { color: colors.foreground }]} numberOfLines={2}>
-          {product.name}
-        </Text>
-
-        <View style={styles.ratingRow}>
-          <RatingStars rating={product.rating} size={10} />
-          <Text style={[styles.reviewCount, { color: colors.mutedForeground }]}>
-            ({product.reviewCount.toLocaleString()})
-          </Text>
-        </View>
-
-        {/* Price row — price left, + button right */}
-        <View style={styles.bottomRow}>
-          <View style={styles.priceCol}>
-            <Text style={[styles.price, { color: colors.foreground }]}>
-              {formatPrice(product.price)}
-            </Text>
-            <Text style={[styles.originalPrice, { color: colors.mutedForeground }]}>
-              {formatPrice(product.originalPrice)}
-            </Text>
-          </View>
-
-          {onWishlistToggle && (
-            <View style={[styles.wishBtnWrap, { backgroundColor: colors.primary }]}>
-              <PlusBtn onPress={onWishlistToggle} />
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={`View ${p.name}`}
+        onPress={onPress}
+        activeOpacity={0.85}
+      >
+        <View style={[s.photo, { backgroundColor: c.muted }]}>
+          <Image
+            source={p.image}
+            style={StyleSheet.absoluteFill}
+            contentFit="contain"
+            transition={150}
+          />
+          {p.discount > 0 && (
+            <View style={s.badge}>
+              <Text style={s.badgeText}>{p.discount}% OFF</Text>
             </View>
           )}
         </View>
-      </View>
-    </TouchableOpacity>
+        <View style={s.info}>
+          <Text
+            style={{
+              fontSize: 9,
+              letterSpacing: 0.8,
+              color: c.mutedForeground,
+            }}
+            numberOfLines={1}
+          >
+            {p.seller.toUpperCase()}
+          </Text>
+          <Text numberOfLines={2} style={[s.name, { color: c.foreground }]}>
+            {p.name}
+          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 4,
+              alignItems: "center",
+              minHeight: 15,
+            }}
+          >
+            {p.reviewCount > 0 ? (
+              <>
+                <Icon name="star" size={11} color={c.star} />
+                <Text style={{ fontSize: 10, color: c.foreground }}>
+                  {p.rating.toFixed(1)}
+                </Text>
+                <Text style={{ fontSize: 9, color: c.mutedForeground }}>
+                  ({p.reviewCount})
+                </Text>
+              </>
+            ) : (
+              <Text style={{ fontSize: 10, color: c.mutedForeground }}>
+                New arrival
+              </Text>
+            )}
+          </View>
+          <View style={s.prices}>
+            <Text style={[s.price, { color: c.foreground }]}>
+              {formatPrice(p.price)}
+            </Text>
+            {p.originalPrice > p.price && (
+              <Text
+                style={{
+                  fontSize: 10,
+                  color: c.mutedForeground,
+                  textDecorationLine: "line-through",
+                }}
+              >
+                {formatPrice(p.originalPrice)}
+              </Text>
+            )}
+          </View>
+          {p.stock <= 0 && (
+            <Text style={{ fontSize: 10, color: c.destructive }}>
+              Out of stock
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+      {onWishlistToggle && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={
+            isWishlisted ? "Remove from wishlist" : "Save to wishlist"
+          }
+          accessibilityState={{ selected: !!isWishlisted }}
+          onPress={onWishlistToggle}
+          style={[s.heart, { backgroundColor: c.card }]}
+        >
+          <Icon
+            name={isWishlisted ? "heart" : "heart-outline"}
+            size={17}
+            color={isWishlisted ? c.destructive : c.foreground}
+          />
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    overflow: 'hidden',
-    borderRadius: 16,
-  },
-  image: {
-    width: '100%',
-    aspectRatio: 0.9,
-    alignItems: 'flex-end',
-    padding: 10,
-  },
-  info: { paddingHorizontal: 11, paddingTop: 9, paddingBottom: 11, gap: 5 },
-
-  /* Discount badge — Amazon pill style */
-  discountBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgb(204, 12, 57)',
+const s = StyleSheet.create({
+  card: { borderRadius: 15, borderWidth: 1, overflow: "hidden" },
+  photo: { aspectRatio: 0.95, width: "100%" },
+  badge: {
+    position: "absolute",
+    top: 10,
+    left: 9,
+    backgroundColor: "#fff8eb",
     borderRadius: 4,
+    paddingVertical: 4,
     paddingHorizontal: 6,
-    paddingVertical: 2,
   },
-  discountText: { fontSize: 10, fontFamily: 'GoogleSans_700Bold', color: '#fff', letterSpacing: 0.2 },
-
-  /* Fixed 2-line height so rating always starts at the same vertical position */
-  name: { fontSize: 13, fontFamily: 'GoogleSans_500Medium', lineHeight: 18, minHeight: 36 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  reviewCount: { fontSize: 10, fontFamily: 'GoogleSans_400Regular' },
-
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 2,
+  badgeText: {
+    color: "#92592b",
+    fontSize: 8,
+    fontFamily: "GoogleSans_700Bold",
   },
-  priceCol: { flex: 1, gap: 1 },
-  price: { fontSize: 15, fontFamily: 'GoogleSans_700Bold' },
-  originalPrice: {
-    fontSize: 11,
-    fontFamily: 'GoogleSans_400Regular',
-    textDecorationLine: 'line-through',
+  heart: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    height: 29,
+    width: 29,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
-
-  wishBtnWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
+  info: { padding: 11, gap: 5 },
+  name: {
+    fontSize: 12,
+    lineHeight: 18,
+    minHeight: 36,
+    fontFamily: "GoogleSans_500Medium",
   },
-  wishBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  prices: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+    marginTop: 3,
   },
+  price: { fontSize: 15, fontFamily: "GoogleSans_700Bold" },
 });

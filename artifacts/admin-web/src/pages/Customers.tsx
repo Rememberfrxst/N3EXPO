@@ -1,107 +1,120 @@
-import React, { useEffect, useState } from 'react';
-import { adminApi } from '../lib/api';
-import { Users, Shield, CheckCircle, XCircle } from 'lucide-react';
-
+import React, { useEffect, useState } from "react";
+import { Search, Users } from "lucide-react";
+import { adminApi } from "../lib/api";
 export function Customers() {
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchCustomers = () => {
+  const [rows, setRows] = useState<any[]>([]),
+    [q, setQ] = useState(""),
+    [error, setError] = useState(""),
+    [loading, setLoading] = useState(true);
+  const load = () => {
     setLoading(true);
-    adminApi.customers.list()
-      .then(setCustomers)
-      .catch(console.error)
+    adminApi.customers
+      .list()
+      .then(setRows)
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   };
-
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
-  const handleToggleVerified = async (user: any) => {
+  useEffect(load, []);
+  const update = async (u: any, data: any) => {
     try {
-      await adminApi.customers.update(user.id, { isVerified: !user.isVerified });
-      fetchCustomers();
-    } catch (err: any) {
-      alert('Error updating user: ' + err.message);
+      await adminApi.customers.update(u.id, data);
+      load();
+    } catch (e: any) {
+      setError(e.message);
     }
   };
-
-  const handleToggleRole = async (user: any) => {
-    const newRole = user.role === 'admin' ? 'customer' : 'admin';
-    if (!confirm(`Are you sure you want to change role for ${user.name} to ${newRole}?`)) return;
-    try {
-      await adminApi.customers.update(user.id, { role: newRole });
-      fetchCustomers();
-    } catch (err: any) {
-      alert('Error updating role: ' + err.message);
-    }
-  };
-
+  const list = rows.filter((r) =>
+    `${r.name} ${r.email}`.toLowerCase().includes(q.toLowerCase()),
+  );
   return (
     <div>
       <div className="header">
         <div>
-          <h1 className="page-title">Customer Management</h1>
-          <p className="page-subtitle">User accounts, verification status, role-based access & 2FA monitoring</p>
+          <p className="eyebrow">THE PEOPLE BEHIND THE ORDERS</p>
+          <h1 className="page-title">Your community</h1>
+          <p className="page-subtitle">
+            Manage customer accounts, seller access and verification.
+          </p>
         </div>
       </div>
-
-      <div className="card-table">
-        <div className="table-header">
-          <h3 style={{ fontSize: 16, fontWeight: 700 }}>Users ({customers.length})</h3>
+      {error && (
+        <div className="error" role="alert">
+          {error}
         </div>
-
+      )}
+      <div className="card-table">
+        <div className="resource-toolbar">
+          <strong>{list.length} accounts</strong>
+          <label className="search-box">
+            <Search size={16} />
+            <input
+              aria-label="Search customers"
+              placeholder="Search name or email…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </label>
+        </div>
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center' }}>Loading user directory...</div>
+          <div className="empty-state">Loading your community…</div>
+        ) : !list.length ? (
+          <div className="empty-state">
+            <Users size={30} />
+            <p>No matching accounts.</p>
+          </div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Phone</th>
-                <th>Role</th>
-                <th>2FA Status</th>
-                <th>Verified</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map(c => (
-                <tr key={c.id}>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{c.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.email}</div>
-                  </td>
-                  <td style={{ fontSize: 13 }}>{c.phone || 'N/A'}</td>
-                  <td>
-                    <button
-                      onClick={() => handleToggleRole(c)}
-                      className={`badge ${c.role === 'admin' ? 'badge-primary' : 'badge-warning'}`}
-                      style={{ border: 'none', cursor: 'pointer', textTransform: 'capitalize' }}
-                    >
-                      {c.role || 'customer'}
-                    </button>
-                  </td>
-                  <td>
-                    <span className={`badge ${c.is2faEnabled ? 'badge-success' : 'badge-danger'}`}>
-                      {c.is2faEnabled ? '2FA Enabled' : 'Disabled'}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${c.isVerified ? 'badge-success' : 'badge-warning'}`}>
-                      {c.isVerified ? 'Verified' : 'Unverified'}
-                    </span>
-                  </td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => handleToggleVerified(c)}>
-                      {c.isVerified ? 'Unverify' : 'Verify'}
-                    </button>
-                  </td>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Phone</th>
+                  <th>Access</th>
+                  <th>Verification</th>
+                  <th>Joined</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {list.map((u) => (
+                  <tr key={u.id}>
+                    <td>
+                      <strong>{u.name}</strong>
+                      <small>{u.email}</small>
+                    </td>
+                    <td>{u.phone || "—"}</td>
+                    <td>
+                      {u.role === "admin" ? (
+                        <span className="badge badge-primary">
+                          Owner account
+                        </span>
+                      ) : (
+                        <select
+                          aria-label={`Role for ${u.name}`}
+                          className="form-select"
+                          value={u.role}
+                          onChange={(e) => update(u, { role: e.target.value })}
+                        >
+                          <option value="customer">Customer</option>
+                          <option value="seller">Seller</option>
+                        </select>
+                      )}
+                    </td>
+                    <td>
+                      <button
+                        disabled={u.role === "admin"}
+                        className={`badge ${u.isVerified ? "badge-success" : "badge-neutral"}`}
+                        style={{ border: 0 }}
+                        onClick={() => update(u, { isVerified: !u.isVerified })}
+                      >
+                        {u.isVerified ? "Verified" : "Unverified"}
+                      </button>
+                    </td>
+                    <td>{new Date(u.createdAt).toLocaleDateString("en-IN")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
