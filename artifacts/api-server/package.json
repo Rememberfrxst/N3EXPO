@@ -9,6 +9,7 @@
     "start": "dotenv -e .env -- node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "provision-owner": "../../lib/db/node_modules/.bin/tsx provision-owner.ts",
+    "seed-demo": "dotenv -e .env -- ../../lib/db/node_modules/.bin/tsx ../../lib/db/src/demo-seed.ts",
     "test": "../../lib/db/node_modules/.bin/tsx --test test/store.test.ts"
   },
   "dependencies": {
