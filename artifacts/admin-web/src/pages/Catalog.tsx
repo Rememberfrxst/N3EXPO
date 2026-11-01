@@ -46,8 +46,8 @@ export function Products() {
         {
           key: "specifications",
           label: "Specifications",
-          type: "json",
-          hint: 'JSON, e.g. {"Material":"Cotton","Color":"Olive"}',
+          type: "specs",
+          hint: "Add clear details such as material, size or warranty.",
         },
         active,
         {
@@ -113,7 +113,7 @@ export function Banners() {
         {
           key: "linkValue",
           label: "Destination",
-          hint: "Category slug, product ID or full website URL.",
+          hint: "Choose a product or category, or enter a full website URL.",
         },
         { key: "startsAt", label: "Start date & time", type: "datetime-local" },
         { key: "endsAt", label: "End date & time", type: "datetime-local" },

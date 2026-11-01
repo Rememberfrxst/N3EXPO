@@ -1111,3 +1111,23 @@ tbody tr:hover td {
     display: none;
   }
 }
+.specification-fields {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr auto;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+@media (max-width: 480px) {
+  .specification-fields {
+    grid-template-columns: 1fr auto;
+  }
+  .specification-fields > input:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .specification-fields > button {
+    grid-column: 2;
+    grid-row: 1/3;
+  }
+}

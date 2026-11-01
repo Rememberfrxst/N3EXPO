@@ -1,3 +1,4 @@
+import { SpecificationFields } from "./SpecificationFields";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Plus,
@@ -48,6 +49,7 @@ export function ResourceManager({
     [saving, setSaving] = useState(false),
     [notice, setNotice] = useState(""),
     [cats, setCats] = useState<any[]>([]),
+    [destinationProducts, setDestinationProducts] = useState<any[]>([]),
     [uploading, setUploading] = useState(false);
   const dialog = useRef<HTMLDivElement>(null),
     opener = useRef<HTMLElement | null>(null);
@@ -64,10 +66,15 @@ export function ResourceManager({
   };
   useEffect(() => {
     void load();
-    if (resource === "products")
+    if (resource === "products" || resource === "banners")
       adminApi.categories
         .list()
         .then(setCats)
+        .catch((e) => setError(e.message));
+    if (resource === "banners")
+      adminApi.products
+        .list()
+        .then(setDestinationProducts)
         .catch((e) => setError(e.message));
   }, [resource]);
   useEffect(() => {
@@ -115,8 +122,7 @@ export function ResourceManager({
     for (const f of fields) {
       if (f.type === "images")
         d[f.key] = (row?.images || []).map((i: any) => i.url).join("\n");
-      if (f.type === "json")
-        d[f.key] = row?.[f.key] ? JSON.stringify(row[f.key], null, 2) : "";
+      if (f.type === "specs") d[f.key] = Object.entries(row?.[f.key] || {});
       if (f.type === "datetime-local" && d[f.key]) {
         const dt = new Date(d[f.key]);
         d[f.key] = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
@@ -139,8 +145,19 @@ export function ResourceManager({
             .split("\n")
             .map((s: string) => s.trim())
             .filter(Boolean);
-        else if (f.type === "json") body[f.key] = v ? JSON.parse(v) : {};
-        else if (f.type === "number")
+        else if (f.type === "specs") {
+          const details = (v || [])
+            .map(([k, value]: [string, string]) => [k.trim(), value.trim()])
+            .filter(([k, value]: [string, string]) => k || value);
+          if (details.some(([k, value]: [string, string]) => !k || !value))
+            throw new Error("Each product detail needs a name and a value.");
+          if (
+            new Set(details.map(([k]: [string, string]) => k.toLowerCase()))
+              .size !== details.length
+          )
+            throw new Error("Use a different name for each product detail.");
+          body[f.key] = Object.fromEntries(details);
+        } else if (f.type === "number")
           body[f.key] = v === "" || v === undefined ? null : Number(v);
         else if (f.type === "datetime-local")
           body[f.key] = v ? new Date(v).toISOString() : null;
@@ -164,7 +181,7 @@ export function ResourceManager({
     } catch (e: any) {
       setError(
         e instanceof SyntaxError
-          ? "Specifications must be valid JSON."
+          ? "Could not read product details."
           : e.message,
       );
     } finally {
@@ -474,13 +491,48 @@ export function ResourceManager({
                 {fields.map((f) => (
                   <div
                     key={f.key}
-                    className={`form-group ${["textarea", "images", "json"].includes(f.type || "") ? "wide" : ""}`}
+                    className={`form-group ${["textarea", "images", "specs"].includes(f.type || "") ? "wide" : ""}`}
                   >
                     <label className="form-label" htmlFor={`field-${f.key}`}>
                       {f.label}
                       {f.required && <span> *</span>}
                     </label>
-                    {f.type === "checkbox" ? (
+                    {f.type === "specs" ? (
+                      <SpecificationFields
+                        value={draft[f.key] || []}
+                        onChange={(value) =>
+                          setDraft({ ...draft, [f.key]: value })
+                        }
+                        disabled={saving}
+                      />
+                    ) : f.key === "linkValue" &&
+                      ["category", "product"].includes(draft.linkType) ? (
+                      <select
+                        id={`field-${f.key}`}
+                        className="form-select"
+                        required
+                        value={draft[f.key] || ""}
+                        onChange={(e) =>
+                          setDraft({ ...draft, [f.key]: e.target.value })
+                        }
+                      >
+                        <option value="">Choose a {draft.linkType}…</option>
+                        {(draft.linkType === "category"
+                          ? cats.map((cat) => ({
+                              value: cat.slug,
+                              label: cat.name,
+                            }))
+                          : destinationProducts.map((product) => ({
+                              value: product.id,
+                              label: product.name,
+                            }))
+                        ).map((option) => (
+                          <option value={option.value} key={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : f.type === "checkbox" ? (
                       <label className="toggle-row">
                         <input
                           id={`field-${f.key}`}
@@ -498,7 +550,11 @@ export function ResourceManager({
                         className="form-select"
                         value={draft[f.key] || ""}
                         onChange={(e) =>
-                          setDraft({ ...draft, [f.key]: e.target.value })
+                          setDraft({
+                            ...draft,
+                            [f.key]: e.target.value,
+                            ...(f.key === "linkType" ? { linkValue: "" } : {}),
+                          })
                         }
                         required={f.required}
                       >
@@ -515,7 +571,7 @@ export function ResourceManager({
                           </option>
                         ))}
                       </select>
-                    ) : ["textarea", "images", "json"].includes(
+                    ) : ["textarea", "images", "specs"].includes(
                         f.type || "",
                       ) ? (
                       <textarea
@@ -524,7 +580,11 @@ export function ResourceManager({
                         rows={f.type === "images" ? 3 : 4}
                         value={draft[f.key] || ""}
                         onChange={(e) =>
-                          setDraft({ ...draft, [f.key]: e.target.value })
+                          setDraft({
+                            ...draft,
+                            [f.key]: e.target.value,
+                            ...(f.key === "linkType" ? { linkValue: "" } : {}),
+                          })
                         }
                         required={f.required}
                       />
@@ -538,7 +598,11 @@ export function ResourceManager({
                         required={f.required}
                         value={draft[f.key] ?? ""}
                         onChange={(e) =>
-                          setDraft({ ...draft, [f.key]: e.target.value })
+                          setDraft({
+                            ...draft,
+                            [f.key]: e.target.value,
+                            ...(f.key === "linkType" ? { linkValue: "" } : {}),
+                          })
                         }
                       />
                     )}{" "}
