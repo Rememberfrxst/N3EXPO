@@ -1131,3 +1131,24 @@ tbody tr:hover td {
     grid-row: 1/3;
   }
 }
+.product-option {
+  padding: 14px;
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+  border-radius: 7px;
+}
+.product-option .editor-grid {
+  row-gap: 12px;
+  margin-bottom: 10px;
+}
+.product-option .text-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  text-decoration: none;
+  margin-left: 0;
+}
+.product-option small {
+  margin-bottom: 5px;
+}

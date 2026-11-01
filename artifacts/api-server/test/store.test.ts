@@ -297,4 +297,168 @@ await test("owner-only administration, catalog, campaign schedules and coupon ch
   assert.ok(
     (await request("/admin/audit-logs", "GET", undefined, token)).length >= 8,
   );
+  // Reference-style department navigation includes child-category products.
+  const child = await request(
+    "/admin/categories",
+    "POST",
+    { name: "Shirts", slug: `shirts-${suffix}`, parentId: cat.id },
+    token,
+    201,
+  );
+  const listedCategories = await request("/categories");
+  assert.equal(
+    listedCategories.find((c: any) => c.id === child.id).parentId,
+    cat.id,
+  );
+  await request(
+    `/admin/categories/${cat.id}`,
+    "PATCH",
+    { parentId: child.id },
+    token,
+    400,
+  );
+  const optionsProduct = await request(
+    "/admin/products",
+    "POST",
+    {
+      name: "Size test shirt",
+      price: 100,
+      stock: 0,
+      categoryId: child.id,
+      variants: [
+        { name: "Size", value: "S", stock: 0, priceModifier: 0 },
+        { name: "Size", value: "M", stock: 2, priceModifier: 20 },
+      ],
+    },
+    token,
+    201,
+  );
+  const optionDetail = await request(`/products/${optionsProduct.id}`),
+    medium = optionDetail.variants.find((v: any) => v.value === "M");
+  assert.equal(optionDetail.variants.length, 2);
+  const departmentProducts = await request(
+    `/products?category=${cat.slug}&inStock=true`,
+  );
+  assert.ok(
+    departmentProducts.data.some((item: any) => item.id === optionsProduct.id),
+  );
+  await request("/cart", "DELETE", undefined, userToken);
+  await request(
+    "/cart",
+    "POST",
+    { productId: optionsProduct.id, variantId: medium.id, quantity: 2 },
+    userToken,
+    201,
+  );
+  const variantOrder = await request(
+    "/orders",
+    "POST",
+    { addressId: address.id, paymentMethod: "cod" },
+    userToken,
+    201,
+  );
+  assert.equal(Number(variantOrder.total), 265);
+  assert.equal(
+    (await request(`/products/${optionsProduct.id}`)).variants.find(
+      (v: any) => v.id === medium.id,
+    ).stock,
+    0,
+  );
+  await request(
+    "/cart",
+    "POST",
+    { productId: optionsProduct.id, variantId: medium.id, quantity: 1 },
+    userToken,
+    400,
+  );
+  await request(
+    `/admin/products/${optionsProduct.id}`,
+    "PATCH",
+    {
+      variants: [
+        {
+          id: medium.id,
+          name: "Size",
+          value: "M",
+          stock: 3,
+          priceModifier: 20,
+        },
+      ],
+    },
+    token,
+  );
+  assert.equal(
+    (await request(`/products/${optionsProduct.id}`)).variants.find(
+      (v: any) => v.id === medium.id,
+    ).stock,
+    3,
+  );
+  await request(
+    `/admin/products/${optionsProduct.id}`,
+    "PATCH",
+    {
+      price: 250,
+      variants: [
+        {
+          id: medium.id,
+          name: "Size",
+          value: "M",
+          stock: -1,
+          priceModifier: 0,
+        },
+      ],
+    },
+    token,
+    400,
+  );
+  assert.equal(
+    Number((await request(`/products/${optionsProduct.id}`)).price),
+    100,
+    "Invalid option edits roll back the parent product edit",
+  );
+  const profile = await request(
+    "/auth/profile",
+    "PATCH",
+    {
+      name: "Updated customer",
+      phone: "9" + String(Date.now()).slice(-9),
+      role: "admin",
+    },
+    userToken,
+  );
+  assert.equal(profile.name, "Updated customer");
+  assert.equal(profile.role, "customer");
+  assert.ok(!("passwordHash" in profile) && !("totpSecret" in profile));
+  await request(
+    "/admin/settings",
+    "PUT",
+    {
+      ...settings,
+      returnsHeadline: "Return assistance",
+      returnsPolicy: "Contact customer care with your order number.",
+    },
+    token,
+  );
+  assert.equal(
+    (await request("/storefront")).returnsHeadline,
+    "Return assistance",
+  );
+  const futureCoupon = await request(
+    "/admin/coupons",
+    "POST",
+    {
+      code: `FUTURE${suffix}`,
+      discountType: "percentage",
+      discountValue: 20,
+      validFrom: "2099-01-01",
+    },
+    token,
+    201,
+  );
+  const publicOffers = await request("/storefront/offers");
+  assert.ok(
+    !publicOffers.some(
+      (offer: any) => offer.id === futureCoupon.id || offer.id === coupon.id,
+    ),
+  );
 });

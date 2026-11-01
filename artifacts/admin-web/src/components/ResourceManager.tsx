@@ -1,3 +1,4 @@
+import { ProductOptions } from "./ProductOptions";
 import { SpecificationFields } from "./SpecificationFields";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -66,7 +67,11 @@ export function ResourceManager({
   };
   useEffect(() => {
     void load();
-    if (resource === "products" || resource === "banners")
+    if (
+      resource === "products" ||
+      resource === "banners" ||
+      resource === "categories"
+    )
       adminApi.categories
         .list()
         .then(setCats)
@@ -123,6 +128,7 @@ export function ResourceManager({
       if (f.type === "images")
         d[f.key] = (row?.images || []).map((i: any) => i.url).join("\n");
       if (f.type === "specs") d[f.key] = Object.entries(row?.[f.key] || {});
+      if (f.type === "variants") d[f.key] = row?.[f.key] || [];
       if (f.type === "datetime-local" && d[f.key]) {
         const dt = new Date(d[f.key]);
         d[f.key] = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
@@ -145,6 +151,7 @@ export function ResourceManager({
             .split("\n")
             .map((s: string) => s.trim())
             .filter(Boolean);
+        else if (f.type === "variants") body[f.key] = v || [];
         else if (f.type === "specs") {
           const details = (v || [])
             .map(([k, value]: [string, string]) => [k.trim(), value.trim()])
@@ -491,13 +498,21 @@ export function ResourceManager({
                 {fields.map((f) => (
                   <div
                     key={f.key}
-                    className={`form-group ${["textarea", "images", "specs"].includes(f.type || "") ? "wide" : ""}`}
+                    className={`form-group ${["textarea", "images", "specs", "variants"].includes(f.type || "") ? "wide" : ""}`}
                   >
                     <label className="form-label" htmlFor={`field-${f.key}`}>
                       {f.label}
                       {f.required && <span> *</span>}
                     </label>
-                    {f.type === "specs" ? (
+                    {f.type === "variants" ? (
+                      <ProductOptions
+                        value={draft[f.key] || []}
+                        onChange={(value) =>
+                          setDraft({ ...draft, [f.key]: value })
+                        }
+                        disabled={saving}
+                      />
+                    ) : f.type === "specs" ? (
                       <SpecificationFields
                         value={draft[f.key] || []}
                         onChange={(value) =>
@@ -544,7 +559,8 @@ export function ResourceManager({
                         />
                         <span>{f.hint || "Enabled"}</span>
                       </label>
-                    ) : f.type === "select" || f.key === "categoryId" ? (
+                    ) : f.type === "select" ||
+                      ["categoryId", "parentId"].includes(f.key) ? (
                       <select
                         id={`field-${f.key}`}
                         className="form-select"
@@ -559,11 +575,16 @@ export function ResourceManager({
                         required={f.required}
                       >
                         <option value="">Select…</option>
-                        {(f.key === "categoryId"
-                          ? cats.map((cat) => ({
-                              value: cat.id,
-                              label: cat.name,
-                            }))
+                        {(["categoryId", "parentId"].includes(f.key)
+                          ? cats
+                              .filter(
+                                (cat) =>
+                                  f.key !== "parentId" || cat.id !== draft.id,
+                              )
+                              .map((cat) => ({
+                                value: cat.id,
+                                label: cat.name,
+                              }))
                           : f.options || []
                         ).map((o) => (
                           <option key={o.value} value={o.value}>
@@ -571,7 +592,7 @@ export function ResourceManager({
                           </option>
                         ))}
                       </select>
-                    ) : ["textarea", "images", "specs"].includes(
+                    ) : ["textarea", "images", "specs", "variants"].includes(
                         f.type || "",
                       ) ? (
                       <textarea

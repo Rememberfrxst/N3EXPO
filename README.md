@@ -18,6 +18,15 @@ These are actual screenshots of the running application with the development cat
 | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | <img src="docs/screenshots/home.png" width="215" alt="Griper home with campaigns and product collections"> | <img src="docs/screenshots/category.png" width="215" alt="Category sidebar, search and product grid"> | <img src="docs/screenshots/product.png" width="215" alt="Product gallery, pricing and shopping bag actions"> | <img src="docs/screenshots/me.png" width="215" alt="Personal account, wishlist, orders and preferences"> |
 
+[Reference analysis and screen mapping](docs/reference-analysis.md)
+
+<details>
+<summary>Product delivery, options and description layout</summary>
+
+<img src="docs/screenshots/product-details.png" width="300" alt="Product quantity, delivery and return details, and description">
+
+</details>
+
 ### Store Studio
 
 Google Fonts **Source Sans 3** for the interface and **Source Serif 4** for editorial headings, with responsive navigation, accessible product forms and a restrained green palette.
@@ -37,25 +46,25 @@ Google Fonts **Source Sans 3** for the interface and **Source Serif 4** for edit
 
 ### Shopping app
 
-- Home: scheduled promotional banners with working destinations, category browsing, featured products and price offers.
-- **Category** replaces the old Search tab. Browse using the sidebar, search the live catalog, sort by price and load more results.
-- Product detail: actual product images, prices, stock, specifications and stored customer reviews. No fabricated ratings or reviews.
+- Reference-based Home: full-width scheduled campaigns, department tabs, category tiles, collection strips, New Arrivals / Best Sellers, featured offers and a compact recommendation feed.
+- **Category** replaces the old Search tab. Browse departments and subcategories with a text sidebar and image tiles; search the live catalog, sort/filter collections and load more results.
+- Product detail: full-width image gallery and fullscreen viewer, orange pricing, active coupon terms, stocked size/product options, quantity controls, delivery/policy links, specifications and stored customer reviews.
 - Saved products, a guest bag, signed-in cart synchronization and delivery addresses.
-- Me: account overview, orders, wishlist, bag, addresses, appearance/language preferences and support email.
+- Me / My Account: editable profile, orders/refunds, wishlist, coupons, addresses, notifications, grouped policy links, preferences and customer care.
 - Checkout: cash on delivery, server-calculated shipping and fixed/percentage coupons. Order creation, coupon usage and inventory changes are atomic.
-- Light/dark theme support and Google Sans typography.
+- Bottom navigation follows the references: Shop, Category, Fresh Fits, Cart and Me. Light/dark theme support and Google Sans typography.
 
 ### Owner administration
 
 - Server-enforced owner email access, bcrypt password storage and rate-limited login.
-- Create/edit/archive products with multiple image URLs, optional direct image uploads, stock, specifications, original/selling prices and home-page featuring.
-- Create/edit/archive categories and control their order, color and cover image.
+- Create/edit/archive products with multiple image URLs, optional direct image uploads, stocked sizes/options, specifications, original/selling prices and home-page featuring.
+- Create/edit/archive categories and subcategories; control the parent department, order, color and cover image.
 - Schedule banners and events with start/end dates and product, category or website destinations.
 - Create/edit/archive coupons with validity dates, minimum spend, maximum discount and redemption limits.
 - Review orders, update fulfillment/payment status, inspect items and print order details.
 - Manage customer/seller access and account verification. Customer administration cannot grant another owner account.
 - Revenue, order, account and low-stock metrics; payment records; CSV summary export; audit history.
-- Store name, home announcement, shipping fees, free-delivery threshold, support address and app download link all come from persisted admin settings.
+- Store name, home announcement, shipping fees, free-delivery threshold, support address, app download link and customer policy content all come from persisted admin settings.
 
 Archived products/content remain in the database to preserve historical order references. Refresh a screen to pick up catalog changes; shared storefront settings also refresh periodically.
 
@@ -179,7 +188,7 @@ TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/griper_test \
   pnpm --filter @workspace/api-server run test
 ```
 
-The test exercises owner login, customer/non-owner access denial, product/image editing, banner schedules, coupon validation and redemption limits, shipping settings, checkout inventory rollback, order status updates and archival. It creates fixture records and must not run against production. GitHub Actions runs these checks with a disposable PostgreSQL service.
+The test exercises owner login, customer/non-owner access denial, product/image/option editing, category hierarchy and cycle validation, banner schedules, public coupon availability, redemption limits, shipping/policy settings, profile editing, variant checkout, inventory rollback, order status updates and archival. It creates fixture records and must not run against production. GitHub Actions runs these checks with a disposable PostgreSQL service.
 
 Browser verification covers the mobile shopping flow and admin login/create/edit/archive flows, along with a narrow admin viewport. Screenshots are stored in `docs/screenshots/`.
 

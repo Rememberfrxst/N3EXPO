@@ -11,32 +11,31 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: c.primary,
+        tabBarActiveTintColor: c.foreground,
         tabBarInactiveTintColor: c.mutedForeground,
         tabBarStyle: {
           backgroundColor: c.card,
           borderTopColor: c.border,
-          height: Platform.OS === "web" ? 74 : undefined,
-          paddingTop: 9,
-          paddingBottom: Platform.OS === "web" ? 14 : undefined,
+          height: Platform.OS === "web" ? 70 : undefined,
+          paddingTop: 6,
+          paddingBottom: Platform.OS === "web" ? 7 : undefined,
         },
         tabBarLabelStyle: {
           fontFamily: "GoogleSans_500Medium",
-          fontSize: 10,
-          marginTop: 4,
+          fontSize: 11,
+          lineHeight: 16,
+          marginTop: 0,
         },
+        tabBarIconStyle: { height: 28 },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
-              size={23}
-              color={color}
-            />
+          title: "Shop",
+          tabBarAccessibilityLabel: "Shop",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="home-outline" size={25} color={color} />
           ),
         }}
       />
@@ -44,40 +43,35 @@ export default function TabLayout() {
         name="search"
         options={{
           title: "Category",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "grid" : "grid-outline"}
-              size={23}
-              color={color}
-            />
+          tabBarAccessibilityLabel: "Category",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="search-outline" size={27} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="fresh-fits"
+        options={{
+          title: "Fresh Fits",
+          tabBarAccessibilityLabel: "Fresh Fits",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="shirt-outline" size={25} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="cart"
         options={{
-          title: "Bag",
+          title: "Cart",
+          tabBarAccessibilityLabel: "Cart",
           tabBarBadge: cart.itemCount || undefined,
-          tabBarBadgeStyle: { backgroundColor: c.primary, fontSize: 9 },
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "bag-handle" : "bag-handle-outline"}
-              size={24}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="orders"
-        options={{
-          title: "Orders",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "receipt" : "receipt-outline"}
-              size={23}
-              color={color}
-            />
+          tabBarBadgeStyle: {
+            backgroundColor: c.foreground,
+            color: c.card,
+            fontSize: 8,
+          },
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="cart-outline" size={27} color={color} />
           ),
         }}
       />
@@ -85,15 +79,13 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: "Me",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "person" : "person-outline"}
-              size={23}
-              color={color}
-            />
+          tabBarAccessibilityLabel: "Me",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="person-outline" size={25} color={color} />
           ),
         }}
       />
+      <Tabs.Screen name="orders" options={{ href: null }} />
     </Tabs>
   );
 }

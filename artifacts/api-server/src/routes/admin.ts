@@ -12,13 +12,14 @@ import {
   orderItems,
   products,
   productImages,
+  productVariants,
   coupons,
   banners,
   categories,
   adminAuditLogs,
   storeSettings,
 } from "@workspace/db/schema";
-import { eq, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import {
   requireAuth,
   requireRole,
@@ -75,6 +76,75 @@ async function audit(req: AuthRequest, action: string, target: string) {
       ipAddress: req.ip,
     })
     .catch(() => {});
+}
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function saveVariants(
+  tx: Transaction,
+  productId: string,
+  price: number,
+  raw: unknown,
+) {
+  if (raw === undefined) return;
+  check(
+    Array.isArray(raw) && raw.length <= 100,
+    "Use up to 100 product options",
+  );
+  const ids = new Set<string>();
+  for (const v of raw as any[]) {
+    check(
+      v && text(v.name, 50) && text(v.value, 100),
+      "Each option needs a name and value",
+    );
+    check(
+      number(v.stock) && Number.isInteger(Number(v.stock)),
+      "Option stock must be a non-negative integer",
+    );
+    const modifier = Number(v.priceModifier || 0);
+    check(
+      Number.isFinite(modifier) && price + modifier > 0,
+      "Invalid option price adjustment",
+    );
+    const values = {
+      name: v.name.trim(),
+      value: v.value.trim(),
+      stock: Number(v.stock),
+      priceModifier: modifier.toFixed(2),
+      sku: v.sku || null,
+    };
+    if (v.id) {
+      check(uuid(v.id) && !ids.has(v.id), "Invalid or repeated option ID");
+      ids.add(v.id);
+      const [updated] = await tx
+        .update(productVariants)
+        .set(values)
+        .where(
+          and(
+            eq(productVariants.id, v.id),
+            eq(productVariants.productId, productId),
+          ),
+        )
+        .returning();
+      check(updated, "Product option was not found");
+    } else {
+      await tx.insert(productVariants).values({ ...values, productId });
+    }
+  }
+}
+async function validateCategoryParent(parentId: unknown, ownId?: string) {
+  if (!parentId) return;
+  check(uuid(parentId), "Invalid parent category");
+  const seen = new Set<string>(ownId ? [ownId] : []);
+  let next: string | null = String(parentId);
+  while (next) {
+    check(!seen.has(next), "A category cannot contain itself");
+    seen.add(next);
+    const [parent] = await db
+      .select()
+      .from(categories)
+      .where(eq(categories.id, next));
+    check(parent, "Parent category was not found");
+    next = parent.parentId;
+  }
 }
 function productData(b: any, create: boolean) {
   const data: Record<string, any> = {};
@@ -204,10 +274,22 @@ router.get(
           )
           .orderBy(productImages.sortOrder)
       : [];
+    const variants = list.length
+      ? await db
+          .select()
+          .from(productVariants)
+          .where(
+            inArray(
+              productVariants.productId,
+              list.map((p) => p.id),
+            ),
+          )
+      : [];
     res.json(
       list.map((p) => ({
         ...p,
         images: images.filter((i) => i.productId === p.id),
+        variants: variants.filter((v) => v.productId === p.id),
       })),
     );
   }),
@@ -235,6 +317,7 @@ router.post(
             sortOrder: i,
           })),
         );
+      await saveVariants(tx, p.id, Number(p.price), req.body.variants);
       return p;
     });
     await audit(req, "CREATE_PRODUCT", product.id);
@@ -263,6 +346,7 @@ router.patch(
             })),
           );
       }
+      if (p) await saveVariants(tx, p.id, Number(p.price), req.body.variants);
       return p;
     });
     if (!product) {
@@ -434,7 +518,16 @@ function contentData(kind: string, b: any, create: boolean) {
   const d: Record<string, any> = {};
   const fields =
     kind === "categories"
-      ? ["name", "slug", "icon", "color", "imageUrl", "sortOrder", "isActive"]
+      ? [
+          "name",
+          "slug",
+          "icon",
+          "color",
+          "imageUrl",
+          "parentId",
+          "sortOrder",
+          "isActive",
+        ]
       : kind === "coupons"
         ? [
             "code",
@@ -467,6 +560,8 @@ function contentData(kind: string, b: any, create: boolean) {
       "Display order must be a non-negative integer",
     );
   if (kind === "categories") {
+    if (d.parentId !== undefined)
+      check(d.parentId === null || uuid(d.parentId), "Invalid parent category");
     if (create || d.name !== undefined)
       check(text(d.name, 100), "Category name is required");
     if (create || d.slug !== undefined)
@@ -553,6 +648,7 @@ for (const [kind, table] of [
     `/${kind}`,
     wrap(async (req, res) => {
       const data = contentData(kind, req.body, true);
+      if (kind === "categories") await validateCategoryParent(data.parentId);
       const created: any = await db
         .insert(table as any)
         .values(data)
@@ -576,6 +672,8 @@ for (const [kind, table] of [
       }
       // Validate the merged record so partial updates cannot create invalid ranges.
       const data = contentData(kind, { ...existing, ...req.body }, true);
+      if (kind === "categories")
+        await validateCategoryParent(data.parentId, existing.id);
       const [row] = await db
         .update(table as any)
         .set(data)
@@ -631,7 +729,35 @@ router.put(
       "Invalid support email",
     );
     check(!b.downloadUrl || url(b.downloadUrl), "Invalid download URL");
+    const policyKeys = [
+      "returnsHeadline",
+      "returnsPolicy",
+      "shippingPolicy",
+      "privacyPolicy",
+      "termsOfService",
+      "aboutStore",
+    ] as const;
+    const [existingSettings] = await db
+      .select()
+      .from(storeSettings)
+      .where(eq(storeSettings.id, "storefront"));
+    const previous = {
+      ...DEFAULT_STOREFRONT,
+      ...((existingSettings?.data as object) || {}),
+    };
+    const policies: Record<string, string> = {};
+    for (const key of policyKeys) {
+      check(
+        b[key] === undefined ||
+          (typeof b[key] === "string" &&
+            b[key].trim().length > 0 &&
+            b[key].length <= 10000),
+        `Invalid ${key}`,
+      );
+      policies[key] = b[key] ?? previous[key];
+    }
     const data = {
+      ...policies,
       storeName: b.storeName,
       announcement: b.announcement,
       supportEmail: b.supportEmail,

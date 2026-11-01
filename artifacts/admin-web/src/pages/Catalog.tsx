@@ -49,6 +49,7 @@ export function Products() {
           type: "specs",
           hint: "Add clear details such as material, size or warranty.",
         },
+        { key: "variants", label: "Sizes & product options", type: "variants" },
         active,
         {
           key: "isFeatured",
@@ -75,6 +76,12 @@ export function Categories() {
           hint: "Optional on creation. Example: home-living",
         },
         { key: "imageUrl", label: "Cover image URL", type: "url" },
+        {
+          key: "parentId",
+          label: "Parent category (optional)",
+          type: "select",
+          hint: "Group this category under a department.",
+        },
         { key: "color", label: "Accent color", type: "color" },
         { key: "sortOrder", label: "Display order", type: "number" },
         active,

@@ -116,6 +116,44 @@ export function Settings() {
                   )}
                 </div>
               ))}
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: 22,
+                  marginTop: 8,
+                }}
+              >
+                <h3 style={{ fontSize: 15, marginBottom: 18 }}>
+                  Customer care & policies
+                </h3>
+                {[
+                  { key: "returnsHeadline", label: "Returns headline" },
+                  { key: "returnsPolicy", label: "Return and exchange policy" },
+                  {
+                    key: "shippingPolicy",
+                    label: "Delivery and shipping policy",
+                  },
+                  { key: "privacyPolicy", label: "Privacy information" },
+                  { key: "termsOfService", label: "Terms and conditions" },
+                  { key: "aboutStore", label: "About your store" },
+                ].map((field) => (
+                  <div className="form-group" key={field.key}>
+                    <label htmlFor={field.key} className="form-label">
+                      {field.label}
+                    </label>
+                    <textarea
+                      id={field.key}
+                      className="form-textarea"
+                      rows={field.key === "returnsHeadline" ? 1 : 4}
+                      value={data[field.key] || ""}
+                      required
+                      onChange={(e) =>
+                        setData({ ...data, [field.key]: e.target.value })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
               <button disabled={busy} className="btn btn-primary">
                 <Save size={15} />
                 {busy ? "Saving…" : "Save settings"}

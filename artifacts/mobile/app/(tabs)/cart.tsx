@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Platform,
@@ -10,14 +10,14 @@ import {
 import { Image } from "expo-image";
 import { TextInput } from "@/components/TextInput";
 import { Text } from "@/components/Text";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path } from "react-native-svg";
 import SvgIcon from "@/components/SvgIcon";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
-import { useCart } from "@/context/CartContext";
+import { useCart, cartItemKey } from "@/context/CartContext";
 import { formatPrice } from "@/constants/data";
 
 function BackChevronIcon({ size, color }: { size: number; color: string }) {
@@ -48,9 +48,13 @@ export default function CartScreen() {
     itemCount,
   } = useCart();
   const isWeb = Platform.OS === "web";
-  const topPad = isWeb ? 67 : insets.top;
-  const bottomPad = isWeb ? 34 : insets.bottom;
-  const [couponInput, setCouponInput] = useState("");
+  const topPad = insets.top;
+  const bottomPad = insets.bottom;
+  const couponParams = useLocalSearchParams<{ coupon?: string }>();
+  const [couponInput, setCouponInput] = useState(couponParams.coupon || "");
+  useEffect(() => {
+    if (couponParams.coupon) setCouponInput(couponParams.coupon);
+  }, [couponParams.coupon]);
   const [couponMsg, setCouponMsg] = useState("");
 
   const handleApplyCoupon = async () => {
@@ -114,7 +118,10 @@ export default function CartScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View
+      testID="cart-screen"
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <View
         style={[
           styles.header,
@@ -142,7 +149,7 @@ export default function CartScreen() {
         {/* Cart Items */}
         <View style={[styles.section, { backgroundColor: colors.card }]}>
           {items.map((item, idx) => (
-            <View key={item.product.id}>
+            <View key={cartItemKey(item)}>
               {idx > 0 && (
                 <View
                   style={[styles.divider, { backgroundColor: colors.border }]}
@@ -168,7 +175,7 @@ export default function CartScreen() {
                       { color: colors.mutedForeground },
                     ]}
                   >
-                    by {item.product.seller}
+                    {item.variantLabel || `by ${item.product.seller}`}
                   </Text>
                   <View style={styles.itemPriceRow}>
                     <Text
@@ -188,8 +195,10 @@ export default function CartScreen() {
                   <View style={styles.qtyRow}>
                     <TouchableOpacity
                       style={[styles.qtyBtn, { backgroundColor: colors.muted }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Decrease quantity for ${item.variantLabel || item.product.name}`}
                       onPress={() => {
-                        updateQuantity(item.product.id, item.quantity - 1);
+                        updateQuantity(cartItemKey(item), item.quantity - 1);
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }}
                     >
@@ -206,8 +215,11 @@ export default function CartScreen() {
                     </Text>
                     <TouchableOpacity
                       style={[styles.qtyBtn, { backgroundColor: colors.muted }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Increase quantity for ${item.variantLabel || item.product.name}`}
+                      disabled={item.quantity >= item.product.stock}
                       onPress={() => {
-                        updateQuantity(item.product.id, item.quantity + 1);
+                        updateQuantity(cartItemKey(item), item.quantity + 1);
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }}
                     >
@@ -216,7 +228,7 @@ export default function CartScreen() {
                     <TouchableOpacity
                       style={styles.removeBtn}
                       onPress={() => {
-                        removeItem(item.product.id);
+                        removeItem(cartItemKey(item));
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                       }}
                     >
@@ -254,7 +266,7 @@ export default function CartScreen() {
                   fontFamily: "GoogleSans_400Regular",
                 },
               ]}
-              placeholder="Enter coupon code (e.g. GRIPER10)"
+              placeholder="Enter coupon code"
               placeholderTextColor={colors.mutedForeground}
               value={couponInput}
               onChangeText={setCouponInput}

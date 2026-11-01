@@ -16,6 +16,7 @@ export interface Product {
   tags: string[];
   isExpress: boolean;
   specifications: Record<string, string>;
+  variantCount?: number;
 }
 
 export interface Category {
@@ -45,7 +46,8 @@ export interface User {
   email: string;
   phone: string;
   addresses: Address[];
-  role: 'user' | 'admin';
+  role: "user" | "admin";
+  avatarUrl?: string;
 }
 
 export interface OrderItem {
@@ -60,10 +62,16 @@ export interface Order {
   id: string;
   items: OrderItem[];
   total: number;
-  status: 'pending' | 'confirmed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
+  status:
+    | "pending"
+    | "confirmed"
+    | "shipped"
+    | "out_for_delivery"
+    | "delivered"
+    | "cancelled";
   date: string;
   estimatedDelivery: string;
-  paymentMethod: 'razorpay' | 'upi' | 'cod';
+  paymentMethod: "razorpay" | "upi" | "cod";
   address: Address;
 }
 
@@ -82,10 +90,16 @@ export const PRODUCTS: Product[] = [];
 
 export const SELLER_PRODUCTS: SellerProduct[] = [];
 
-export const BANNERS: { id: string; image: any; title: string; subtitle: string; color: string }[] = [];
+export const BANNERS: {
+  id: string;
+  image: any;
+  title: string;
+  subtitle: string;
+  color: string;
+}[] = [];
 
 export const COUPONS: Record<string, number> = {};
 
 export const formatPrice = (price: number): string => {
-  return '₹' + price.toLocaleString('en-IN');
+  return "₹" + price.toLocaleString("en-IN");
 };

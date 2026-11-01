@@ -338,4 +338,38 @@ router.get("/me", requireAuth, async (req: AuthRequest, res) => {
   res.json(safeUser);
 });
 
+router.patch("/profile", requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const { name, phone } = req.body;
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      name.length > 100 ||
+      (phone !== undefined &&
+        (typeof phone !== "string" ||
+          (phone !== "" && !/^\+?[0-9 ()-]{7,15}$/.test(phone))))
+    ) {
+      res.status(400).json({ error: "Enter a valid name and phone number" });
+      return;
+    }
+    const [user] = await db
+      .update(users)
+      .set({
+        name: name.trim(),
+        ...(phone !== undefined && { phone: phone.trim() || null }),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, req.user!.id))
+      .returning();
+    const { passwordHash: _, totpSecret: __, ...safe } = user;
+    res.json(safe);
+  } catch (e: any) {
+    res
+      .status(e.cause?.code === "23505" || e.code === "23505" ? 409 : 500)
+      .json({
+        error:
+          "Could not update profile. This phone number may already be in use.",
+      });
+  }
+});
 export default router;

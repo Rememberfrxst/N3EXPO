@@ -15,11 +15,16 @@ export interface CartItem {
   product: Product;
   quantity: number;
   cartItemId?: string;
+  variantId?: string;
+  variantLabel?: string;
 }
 
 interface CartContextType {
   items: CartItem[];
-  addItem: (product: Product) => Promise<void>;
+  addItem: (
+    product: Product,
+    options?: { variantId?: string; variantLabel?: string; quantity?: number },
+  ) => Promise<void>;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, qty: number) => void;
   clearCart: () => void;
@@ -42,10 +47,23 @@ interface CartContextType {
   ) => Promise<Order> | Order;
 }
 
+export const cartItemKey = (item: CartItem) =>
+  item.cartItemId || `${item.product.id}:${item.variantId || ""}`;
 function mapCartItem(item: ApiCartItem): CartItem & { cartItemId: string } {
+  const product = mapApiProduct(item.product),
+    modifier = Number(item.variant?.priceModifier || 0);
   return {
     cartItemId: item.id,
-    product: mapApiProduct(item.product),
+    variantId: item.variantId || undefined,
+    variantLabel: item.variant
+      ? `${item.variant.name}: ${item.variant.value}`
+      : undefined,
+    product: {
+      ...product,
+      price: product.price + modifier,
+      originalPrice: product.originalPrice + modifier,
+      stock: item.variant?.stock ?? product.stock,
+    },
     quantity: item.quantity,
   };
 }
@@ -108,9 +126,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           const guestData = await AsyncStorage.getItem(CART_KEY);
           if (guestData) {
             const guestItems = JSON.parse(guestData) as CartItem[];
-            for (const item of guestItems)
-              await api.cart.add(item.product.id, item.quantity);
-            await AsyncStorage.removeItem(CART_KEY);
+            const remaining: CartItem[] = [];
+            for (const item of guestItems) {
+              try {
+                await api.cart.add(
+                  item.product.id,
+                  item.quantity,
+                  item.variantId,
+                );
+              } catch {
+                remaining.push(item);
+              }
+            }
+            if (remaining.length)
+              await AsyncStorage.setItem(CART_KEY, JSON.stringify(remaining));
+            else await AsyncStorage.removeItem(CART_KEY);
           }
           const apiCart = await api.cart.get();
           if (apiCart && apiCart.items) {
@@ -159,34 +189,63 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addItem = useCallback(
-    async (product: Product) => {
-      if (product.stock < 1) throw new Error("This product is out of stock");
+    async (
+      product: Product,
+      options?: {
+        variantId?: string;
+        variantLabel?: string;
+        quantity?: number;
+      },
+    ) => {
+      const quantity = options?.quantity || 1;
+      if (
+        !Number.isInteger(quantity) ||
+        quantity < 1 ||
+        quantity > product.stock
+      )
+        throw new Error("The requested quantity is unavailable");
       if (user) {
-        await api.cart.add(product.id, 1);
+        await api.cart.add(product.id, quantity, options?.variantId);
         const result = await api.cart.get();
         setItems(result.items.map(mapCartItem));
-      } else {
-        setItems((prev) => {
-          const existing = prev.find((i) => i.product.id === product.id);
-          if ((existing?.quantity || 0) >= product.stock) return prev;
-          const updated = existing
-            ? prev.map((i) =>
-                i.product.id === product.id
-                  ? { ...i, quantity: i.quantity + 1 }
-                  : i,
-              )
-            : [...prev, { product, quantity: 1 }];
-          void saveCart(updated);
-          return updated;
-        });
+        return;
       }
+      const key = `${product.id}:${options?.variantId || ""}`;
+      const previous = items.find((i) => cartItemKey(i) === key);
+      if ((previous?.quantity || 0) + quantity > product.stock)
+        throw new Error("There are no more units available");
+      setItems((prev) => {
+        const existing = prev.find((i) => cartItemKey(i) === key);
+        if ((existing?.quantity || 0) + quantity > product.stock) return prev;
+        const updated = existing
+          ? prev.map((i) =>
+              cartItemKey(i) === key
+                ? { ...i, quantity: i.quantity + quantity }
+                : i,
+            )
+          : [
+              ...prev,
+              {
+                product,
+                quantity,
+                variantId: options?.variantId,
+                variantLabel: options?.variantLabel,
+              },
+            ];
+        void saveCart(updated);
+        return updated;
+      });
     },
-    [user],
+    [user, items],
   );
 
   const removeItem = useCallback(
     async (productId: string) => {
-      const current = items.find((i) => i.product.id === productId);
+      const current = items.find(
+        (i) =>
+          cartItemKey(i) === productId ||
+          (!i.variantId && i.product.id === productId),
+      );
       if (user && current?.cartItemId) {
         try {
           await api.cart.remove(current.cartItemId);
@@ -195,7 +254,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           console.error("Could not remove item", e);
         }
       } else {
-        const updated = items.filter((i) => i.product.id !== productId);
+        const updated = items.filter(
+          (i) =>
+            cartItemKey(i) !== productId &&
+            (i.variantId || i.product.id !== productId),
+        );
         setItems(updated);
         await saveCart(updated);
       }
@@ -208,7 +271,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         await removeItem(productId);
         return;
       }
-      const current = items.find((i) => i.product.id === productId);
+      const current = items.find(
+        (i) =>
+          cartItemKey(i) === productId ||
+          (!i.variantId && i.product.id === productId),
+      );
       if (!current || qty > current.product.stock) return;
       if (user && current.cartItemId) {
         try {
@@ -219,7 +286,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         const updated = items.map((i) =>
-          i.product.id === productId ? { ...i, quantity: qty } : i,
+          cartItemKey(i) === productId ||
+          (!i.variantId && i.product.id === productId)
+            ? { ...i, quantity: qty }
+            : i,
         );
         setItems(updated);
         await saveCart(updated);

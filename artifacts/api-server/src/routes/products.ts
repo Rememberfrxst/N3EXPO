@@ -8,7 +8,7 @@ import {
   reviews,
   userActivity,
 } from "@workspace/db/schema";
-import { eq, like, and, desc, asc, ilike, or, sql } from "drizzle-orm";
+import { eq, like, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { requireAuth, AuthRequest } from "../middlewares/auth";
 
 const router = Router();
@@ -25,6 +25,7 @@ router.get("/", async (req, res) => {
       page = "1",
       limit = "20",
       featured,
+      inStock,
     } = req.query as Record<string, string>;
 
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -33,28 +34,34 @@ router.get("/", async (req, res) => {
 
     const conditions = [eq(products.isActive, true)];
 
+    if (inStock === "true")
+      conditions.push(
+        sql`(${products.stock} > 0 OR EXISTS (SELECT 1 FROM product_variants WHERE product_id = ${products.id} AND stock > 0))`,
+      );
     if (q) conditions.push(ilike(products.name, `%${q}%`));
     if (category) {
-      const isUuid =
-        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-          category,
-        );
-      if (isUuid) {
-        conditions.push(eq(products.categoryId, category));
-      } else {
-        const catRows = await db
-          .select({ id: categories.id })
-          .from(categories)
-          .where(eq(categories.slug, category))
-          .limit(1);
-        if (!catRows.length) {
-          res.json({ data: [], page: pageNum, limit: limitNum });
-          return;
-        }
-        if (catRows.length > 0) {
-          conditions.push(eq(products.categoryId, catRows[0].id));
-        }
+      const allCategories = await db
+        .select()
+        .from(categories)
+        .where(eq(categories.isActive, true));
+      const root = allCategories.find(
+        (cat) => cat.id === category || cat.slug === category,
+      );
+      if (!root) {
+        res.json({ data: [], page: pageNum, limit: limitNum });
+        return;
       }
+      const ids = new Set([root.id]);
+      for (let i = 0; i < allCategories.length; i++) {
+        let changed = false;
+        for (const cat of allCategories)
+          if (cat.parentId && ids.has(cat.parentId) && !ids.has(cat.id)) {
+            ids.add(cat.id);
+            changed = true;
+          }
+        if (!changed) break;
+      }
+      conditions.push(inArray(products.categoryId, [...ids]));
     }
     if (minPrice)
       conditions.push(sql`${products.price} >= ${parseFloat(minPrice)}`);
@@ -89,6 +96,7 @@ router.get("/", async (req, res) => {
         compareAtPrice: products.compareAtPrice,
         brand: products.brand,
         stock: products.stock,
+        variantCount: sql<number>`(SELECT COUNT(*)::int FROM product_variants WHERE product_id = ${products.id})`,
         avgRating: products.avgRating,
         totalReviews: products.totalReviews,
         totalSold: products.totalSold,

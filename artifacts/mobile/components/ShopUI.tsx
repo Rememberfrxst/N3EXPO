@@ -114,13 +114,20 @@ export function SectionTitle({
     </View>
   );
 }
-export function ProductGrid({ products }: { products: Product[] }) {
+export function ProductGrid({
+  products,
+  compact = false,
+}: {
+  products: Product[];
+  compact?: boolean;
+}) {
   const w = useWishlist();
   return (
     <View style={s.grid}>
       {products.map((p) => (
-        <View key={p.id} style={{ width: "48.5%" }}>
+        <View key={p.id} style={{ width: "49.2%" }}>
           <ProductCard
+            compact={compact}
             product={p}
             onPress={() => router.push(`/product/${p.id}`)}
             isWishlisted={w.isInWishlist(p.id)}
@@ -202,7 +209,7 @@ const s = StyleSheet.create({
   iconButton: {
     height: 42,
     width: 42,
-    borderRadius: 22,
+    borderRadius: 2,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -225,7 +232,7 @@ const s = StyleSheet.create({
     gap: 12,
   },
   title: {
-    fontSize: 22,
+    fontSize: 17,
     fontFamily: "GoogleSans_700Bold",
     letterSpacing: -0.6,
   },
@@ -234,7 +241,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    rowGap: 18,
+    rowGap: 8,
   },
   empty: {
     padding: 36,

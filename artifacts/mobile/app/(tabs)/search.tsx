@@ -1,210 +1,259 @@
-import CategoryThumbnail from "@/components/CategoryThumbnail";
-import React, { useCallback, useEffect, useState } from "react";
-import { View, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import React, { useState, useCallback, useEffect } from "react";
+import {
+  View,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  useWindowDimensions,
+} from "react-native";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "@/components/Text";
-import { Icon, SearchField, ProductGrid, LoadState } from "@/components/ShopUI";
+import { Icon } from "@/components/StoreIcon";
+import { StoreHeader, DepartmentTabs } from "@/components/StoreHeader";
+import CategoryThumbnail from "@/components/CategoryThumbnail";
+import { ProductGrid, LoadState } from "@/components/ShopUI";
 import { useColors } from "@/hooks/useColors";
 import { api, ApiCategory, mapApiProduct } from "@/services/api";
-import { Product } from "@/constants/data";
+import type { Product } from "@/constants/data";
 export default function Categories() {
   const c = useColors(),
     insets = useSafeAreaInsets(),
-    params = useLocalSearchParams<{ q?: string; sort?: string }>();
+    { width } = useWindowDimensions(),
+    params = useLocalSearchParams<{ q?: string }>();
   const [cats, setCats] = useState<ApiCategory[]>([]),
-    [active, setActive] = useState(""),
+    [department, setDepartment] = useState(""),
+    [section, setSection] = useState("new"),
     [query, setQuery] = useState(params.q || ""),
-    [sort, setSort] = useState(params.sort || "newest"),
     [items, setItems] = useState<Product[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(false),
     [page, setPage] = useState(1),
-    [hasMore, setHasMore] = useState(false),
+    [more, setMore] = useState(false),
     [retry, setRetry] = useState(0);
+  const roots = cats.filter(
+      (cat) =>
+        !cat.parentId || !cats.some((parent) => parent.id === cat.parentId),
+    ),
+    children = department
+      ? cats.filter((cat) => cat.parentId === department)
+      : roots,
+    rail = children.length ? children : roots,
+    selected = cats.find((cat) => cat.id === section),
+    selectedDepartment = cats.find((cat) => cat.id === department),
+    category = selected?.id || department,
+    railWidth = Math.min(180, Math.round(width * 0.34)),
+    thumbSize = Math.min(72, Math.floor((width - railWidth - 32) / 3)),
+    tiles = selected
+      ? cats.filter((cat) => cat.parentId === selected.id)
+      : children,
+    visibleTiles = tiles.length ? tiles : rail;
   useFocusEffect(
     useCallback(() => {
+      let active = true;
       api.categories
         .list()
-        .then(setCats)
-        .catch(() => setError(true));
-    }, []),
-  );
-  useEffect(() => {
-    setPage(1);
-  }, [query, active, sort]);
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setError(false);
-    const t = setTimeout(() => {
-      api.products
-        .list({ q: query, category: active, sort, page, limit: 20 })
-        .then((p) => {
-          if (alive) {
-            setItems((prev) =>
-              page === 1
-                ? p.data.map(mapApiProduct)
-                : [...prev, ...p.data.map(mapApiProduct)],
-            );
-            setHasMore(p.data.length === 20);
-          }
+        .then((result) => {
+          if (active) setCats(result);
         })
         .catch(() => {
-          if (alive) setError(true);
-        })
-        .finally(() => {
-          if (alive) setLoading(false);
+          if (active) setError(true);
         });
-    }, 250);
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+  useEffect(() => setPage(1), [query, department, section]);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(false);
+    const timer = setTimeout(
+      () =>
+        api.products
+          .list({
+            q: query,
+            category,
+            sort: section === "new" ? "newest" : "popular",
+            page,
+            limit: 20,
+          })
+          .then((result) => {
+            if (active) {
+              setItems((previous) =>
+                page === 1
+                  ? result.data.map(mapApiProduct)
+                  : [...previous, ...result.data.map(mapApiProduct)],
+              );
+              setMore(result.data.length === 20);
+            }
+          })
+          .catch(() => {
+            if (active) setError(true);
+          })
+          .finally(() => {
+            if (active) setLoading(false);
+          }),
+      220,
+    );
     return () => {
-      alive = false;
-      clearTimeout(t);
+      active = false;
+      clearTimeout(timer);
     };
-  }, [query, active, sort, page, retry]);
-  const selected = cats.find((cat) => cat.id === active);
+  }, [query, category, section, page, retry]);
+  const browse = (slug: string, title: string) =>
+    router.push({ pathname: "/products", params: { category: slug, title } });
   return (
     <View
       testID="category-screen"
-      style={{
-        flex: 1,
-        backgroundColor: c.background,
-        paddingTop: insets.top + 18,
-      }}
+      style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}
     >
-      <View style={{ paddingHorizontal: 20, paddingBottom: 18 }}>
-        <Text style={[s.eyebrow, { color: c.primary }]}>
-          FIND YOUR EVERYDAY
-        </Text>
-        <Text style={[s.heading, { color: c.foreground }]}>Category</Text>
-        <SearchField
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search products, brands and more"
+      <StoreHeader query={query} onChangeQuery={setQuery} onSearch={setQuery} />
+      <View style={{ borderBottomWidth: 1, borderColor: c.border }}>
+        <DepartmentTabs
+          tabs={[
+            { id: "", name: "All" },
+            ...roots.map((cat) => ({ id: cat.id, name: cat.name })),
+          ]}
+          active={department}
+          onChange={(id) => {
+            setDepartment(id);
+            setSection("new");
+          }}
         />
       </View>
-      <View
-        style={{
-          flex: 1,
-          flexDirection: "row",
-          borderTopWidth: 1,
-          borderColor: c.border,
-        }}
-      >
+      <View style={{ flex: 1, flexDirection: "row" }}>
         <ScrollView
-          style={{ width: 86, maxWidth: 86, backgroundColor: c.card }}
-          contentContainerStyle={{ paddingBottom: 105 }}
+          style={{
+            width: railWidth,
+            maxWidth: railWidth,
+            backgroundColor: c.muted,
+          }}
+          contentContainerStyle={{ paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
         >
-          {[{ id: "", name: "All finds" }, ...cats].map((cat, i) => (
+          {[
+            { id: "new", name: "New In" },
+            { id: "best", name: "Best Sellers" },
+            ...rail,
+          ].map((item) => (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityState={{ selected: active === cat.id }}
-              key={cat.id}
-              onPress={() => setActive(cat.id)}
+              accessibilityState={{ selected: section === item.id }}
+              key={item.id}
+              onPress={() => setSection(item.id)}
               style={[
-                s.cat,
+                s.nav,
                 {
-                  backgroundColor: active === cat.id ? c.secondary : c.card,
+                  backgroundColor: section === item.id ? c.card : c.muted,
                   borderLeftColor:
-                    active === cat.id ? c.primary : "transparent",
+                    section === item.id ? c.foreground : "transparent",
                 },
               ]}
             >
-              {cat.id ? (
-                <CategoryThumbnail category={cat as ApiCategory} size={39} />
-              ) : (
-                <Icon
-                  name="grid-outline"
-                  size={26}
-                  color={active === cat.id ? c.primary : c.mutedForeground}
-                />
-              )}
-
               <Text
-                numberOfLines={2}
                 style={{
-                  color: active === cat.id ? c.primary : c.mutedForeground,
-                  fontSize: 10,
-                  textAlign: "center",
-                  fontFamily: "GoogleSans_500Medium",
+                  fontSize: 13,
+                  color: section === item.id ? c.foreground : c.mutedForeground,
+                  fontFamily:
+                    section === item.id
+                      ? "GoogleSans_700Bold"
+                      : "GoogleSans_400Regular",
+                  lineHeight: 20,
                 }}
               >
-                {cat.name}
+                {item.name}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 14, paddingBottom: 110 }}
+          contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
         >
-          <View style={s.listHead}>
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  color: c.foreground,
-                  fontSize: 18,
-                  fontFamily: "GoogleSans_700Bold",
-                }}
-              >
-                {selected?.name || "All finds"}
-              </Text>
-              <Text
-                style={{ color: c.mutedForeground, fontSize: 10, marginTop: 3 }}
-              >
-                {query
-                  ? `Results for “${query}”`
-                  : "Explore something you’ll love"}
-              </Text>
-            </View>
-            <TouchableOpacity
-              accessibilityLabel="Change product sort order"
-              onPress={() =>
-                setSort(
-                  sort === "newest"
-                    ? "price_asc"
-                    : sort === "price_asc"
-                      ? "price_desc"
-                      : "newest",
-                )
-              }
-              style={{ padding: 7 }}
-            >
-              <Icon name="swap-vertical-outline" color={c.primary} size={20} />
-            </TouchableOpacity>
-          </View>
-          <Text
-            style={{ fontSize: 10, color: c.mutedForeground, marginBottom: 12 }}
-          >
-            {sort === "price_asc"
-              ? "Price: low to high"
-              : sort === "price_desc"
-                ? "Price: high to low"
-                : "Newest arrivals"}
+          <Text style={[s.heading, { color: c.foreground }]}>
+            {query
+              ? `Results for “${query}”`
+              : selected?.name ||
+                `${section === "new" ? "New In" : "Best Sellers"}${selectedDepartment ? " " + selectedDepartment.name : ""}`}
           </Text>
-          {error ? (
-            <LoadState error="load" retry={() => setRetry((n) => n + 1)} />
-          ) : loading && page === 1 ? (
-            <LoadState loading />
-          ) : items.length ? (
-            <>
-              <ProductGrid products={items} />
-              {hasMore && (
-                <TouchableOpacity
-                  disabled={loading}
-                  onPress={() => setPage((p) => p + 1)}
-                  style={{ padding: 18, alignItems: "center" }}
+          {!query && (
+            <View style={s.tiles}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="View all products in this category"
+                onPress={() =>
+                  browse(
+                    selected?.slug || selectedDepartment?.slug || "",
+                    selected?.name ||
+                      selectedDepartment?.name ||
+                      "All products",
+                  )
+                }
+                style={s.tile}
+              >
+                <View
+                  style={{
+                    height: thumbSize,
+                    width: thumbSize,
+                    borderRadius: thumbSize * 0.3,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: c.secondary,
+                  }}
                 >
-                  <Text style={{ color: c.primary }}>
-                    {loading ? "Loading…" : "Load more finds"}
+                  <Icon name="grid-outline" size={28} />
+                </View>
+                <Text style={[s.tileLabel, { color: c.mutedForeground }]}>
+                  View all
+                </Text>
+              </TouchableOpacity>
+              {visibleTiles.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
+                  onPress={() => browse(cat.slug, cat.name)}
+                  style={s.tile}
+                >
+                  <CategoryThumbnail category={cat} size={thumbSize} />
+                  <Text
+                    numberOfLines={2}
+                    style={[s.tileLabel, { color: c.mutedForeground }]}
+                  >
+                    {cat.name}
                   </Text>
                 </TouchableOpacity>
-              )}
-            </>
+              ))}
+            </View>
+          )}
+          <Text
+            style={[
+              s.heading,
+              { color: c.foreground, marginTop: 8, marginBottom: 12 },
+            ]}
+          >
+            {query ? "Products" : "Recommended"}
+          </Text>
+          {loading && page === 1 ? (
+            <LoadState loading />
+          ) : error ? (
+            <LoadState error="load" retry={() => setRetry((n) => n + 1)} />
+          ) : items.length ? (
+            <ProductGrid products={items} compact />
           ) : (
-            <LoadState empty="No products found. Try another search." />
+            <LoadState empty="No products found" />
+          )}
+          {more && !error && (
+            <TouchableOpacity
+              disabled={loading}
+              onPress={() => setPage((p) => p + 1)}
+              style={{ padding: 16, alignItems: "center" }}
+            >
+              <Text style={{ fontSize: 12, color: c.foreground }}>
+                {loading ? "Loading…" : "View more"}
+              </Text>
+            </TouchableOpacity>
           )}
         </ScrollView>
       </View>
@@ -212,19 +261,31 @@ export default function Categories() {
   );
 }
 const s = StyleSheet.create({
-  eyebrow: { fontSize: 9, letterSpacing: 1.5, marginBottom: 4 },
+  nav: {
+    paddingHorizontal: 12,
+    paddingVertical: 17,
+    borderLeftWidth: 4,
+    minHeight: 53,
+  },
   heading: {
-    fontSize: 31,
-    fontFamily: "GoogleSans_700Bold",
-    letterSpacing: -1,
-    marginBottom: 18,
+    fontSize: 14,
+    fontFamily: "GoogleSans_600SemiBold",
+    paddingTop: 16,
+    marginBottom: 12,
+    lineHeight: 20,
   },
-  cat: {
-    paddingVertical: 18,
-    paddingHorizontal: 6,
-    alignItems: "center",
-    gap: 9,
-    borderLeftWidth: 3,
+  tiles: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 12,
+    marginBottom: 13,
   },
-  listHead: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+  tile: { width: "33.333%", alignItems: "center", paddingHorizontal: 2 },
+  tileLabel: {
+    fontSize: 10,
+    textAlign: "center",
+    lineHeight: 14,
+    marginTop: 6,
+    minHeight: 28,
+  },
 });

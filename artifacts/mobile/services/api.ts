@@ -197,6 +197,8 @@ export const api = {
         { method: "POST", body: { name, email, phone, password }, auth: false },
       ),
     me: () => apiRequest<ApiUser>("/auth/me"),
+    updateProfile: (body: { name: string; phone?: string }) =>
+      apiRequest<ApiUser>("/auth/profile", { method: "PATCH", body }),
     logout: () => apiRequest("/auth/logout", { method: "POST" }),
     refresh: (refreshToken: string) =>
       apiRequest<{ accessToken: string; refreshToken?: string }>(
@@ -449,6 +451,7 @@ export interface ApiProduct {
   tags?: string[];
   images?: ApiProductImage[];
   variants?: ApiProductVariant[];
+  variantCount?: number;
   category?: ApiCategory;
 }
 
@@ -588,10 +591,7 @@ export function mapApiProduct(p: ApiProduct & { imageUrl?: string }): Product {
       ? Math.round(((originalPrice - price) / originalPrice) * 100)
       : 0;
   const primaryImage = p.images?.find((i) => i.isPrimary) ?? p.images?.[0];
-  const imageUrl =
-    p.imageUrl ||
-    primaryImage?.url ||
-    "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500&q=80";
+  const imageUrl = p.imageUrl || primaryImage?.url || "";
 
   return {
     id: p.id,
@@ -611,6 +611,7 @@ export function mapApiProduct(p: ApiProduct & { imageUrl?: string }): Product {
     tags: p.tags ?? [],
     isExpress: false,
     specifications: p.specifications ?? {},
+    variantCount: p.variants?.length ?? p.variantCount ?? 0,
   };
 }
 

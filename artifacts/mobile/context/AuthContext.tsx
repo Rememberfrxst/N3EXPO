@@ -26,6 +26,7 @@ interface AuthContextType {
     password: string,
   ) => Promise<boolean>;
   logout: () => Promise<void>;
+  updateProfile: (name: string, phone: string) => Promise<void>;
   addAddress: (address: Omit<Address, "id">) => Promise<void>;
   setDefaultAddress: (id: string) => Promise<void>;
 }
@@ -52,6 +53,7 @@ function mapApiUser(apiUser: ApiUser, addresses: any[] = []): User {
       isDefault: a.isDefault,
     })),
     role: apiUser.role === "admin" ? "admin" : "user",
+    avatarUrl: apiUser.avatarUrl,
   };
 }
 
@@ -132,6 +134,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [refreshUser],
   );
 
+  const updateProfile = useCallback(
+    async (name: string, phone: string) => {
+      await api.auth.updateProfile({ name, phone });
+      await refreshUser();
+    },
+    [refreshUser],
+  );
   const logout = useCallback(async () => {
     try {
       await api.auth.logout();
@@ -175,6 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         logout,
+        updateProfile,
         addAddress,
         setDefaultAddress,
       }}
