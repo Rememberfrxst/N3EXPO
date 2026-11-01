@@ -84,6 +84,12 @@ type DemoProduct = {
   featured?: boolean;
 };
 
+type DemoVariant = {
+  name: string;
+  value: string;
+  priceModifier?: string;
+};
+
 const productSeed: DemoProduct[] = [
   {
     name: "Essential Oversized T-Shirt",
@@ -376,7 +382,7 @@ const productSeed: DemoProduct[] = [
   },
 ];
 
-function variantsFor(product: DemoProduct) {
+function variantsFor(product: DemoProduct): DemoVariant[] {
   if (["men", "women"].includes(product.category))
     return ["S", "M", "L", "XL"].map((value) => ({ name: "Size", value }));
   if (product.category === "footwear")
