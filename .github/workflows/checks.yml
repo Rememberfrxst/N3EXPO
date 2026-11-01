@@ -2,6 +2,9 @@ name: Storefront checks
 on:
   push:
   pull_request:
+concurrency:
+  group: storefront-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

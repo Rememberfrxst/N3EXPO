@@ -189,7 +189,7 @@ export default function ProductDetail() {
             <Icon name="star" size={15} color={c.star} />
             <Text style={{ color: c.foreground, fontSize: 12 }}>
               {p.reviewCount
-                ? `${p.rating.toFixed(1)} · ${p.reviewCount} ratings`
+                ? `${p.rating.toFixed(1)} · ${p.reviewCount} rating${p.reviewCount === 1 ? "" : "s"}`
                 : "No reviews yet"}
             </Text>
             <Text style={{ color: c.border }}> | </Text>
